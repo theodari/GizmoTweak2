@@ -23,6 +23,23 @@ Item {
     // Context menu position
     property point contextMenuPosition: Qt.point(0, 0)
 
+    // Selected connection
+    property var selectedConnection: null
+
+    // Delete selected connection
+    function deleteSelectedConnection() {
+        if (selectedConnection) {
+            graph.disconnect(selectedConnection)
+            selectedConnection = null
+        }
+    }
+
+    // Clear all selections
+    function clearAllSelections() {
+        graph.clearSelection()
+        selectedConnection = null
+    }
+
     // Find non-overlapping position for a node
     function findValidPosition(nodeUuid, desiredPos, nodeWidth, nodeHeight) {
         var margin = 10
@@ -187,7 +204,7 @@ Item {
 
                 onClicked: function(mouse) {
                     if (mouse.button === Qt.LeftButton) {
-                        graph.clearSelection()
+                        clearAllSelections()
                     }
                 }
 
@@ -212,6 +229,19 @@ Item {
 
             delegate: ConnectionItem {
                 connection: model.connectionObj
+                selected: root.selectedConnection === model.connectionObj
+
+                onClicked: {
+                    graph.clearSelection()
+                    root.selectedConnection = model.connectionObj
+                }
+
+                onDeleteRequested: {
+                    graph.disconnect(model.connectionObj)
+                    if (root.selectedConnection === model.connectionObj) {
+                        root.selectedConnection = null
+                    }
+                }
             }
         }
 
@@ -391,5 +421,34 @@ Item {
         y: 0
         width: parent.width
         height: parent.height
+    }
+
+    // Delete selected items function
+    function deleteSelected() {
+        // Delete selected connection first
+        if (selectedConnection) {
+            graph.disconnect(selectedConnection)
+            selectedConnection = null
+            return
+        }
+
+        // Then delete selected nodes (except Input/Output)
+        var selected = graph.selectedNodes()
+        for (var i = 0; i < selected.length; ++i) {
+            if (selected[i].type !== "Input" && selected[i].type !== "Output") {
+                graph.removeNode(selected[i].uuid)
+            }
+        }
+    }
+
+    // Keyboard shortcuts
+    Shortcut {
+        sequence: "Delete"
+        onActivated: deleteSelected()
+    }
+
+    Shortcut {
+        sequence: "Backspace"
+        onActivated: deleteSelected()
     }
 }

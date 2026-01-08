@@ -16,7 +16,7 @@ ApplicationWindow {
     property NodeGraph graph: NodeGraph {}
     property bool showGrid: false
 
-    // Créer Input et Output au démarrage
+    // Create Input and Output at startup
     Component.onCompleted: {
         graph.createNode("Input", Qt.point(1000, 100))
         graph.createNode("Output", Qt.point(1000, 500))
@@ -33,7 +33,7 @@ ApplicationWindow {
         palette.buttonText: Theme.text
 
         Menu {
-            title: qsTr("&Fichier")
+            title: qsTr("&File")
             palette.window: Theme.surface
             palette.windowText: Theme.text
             palette.base: Theme.surface
@@ -45,7 +45,7 @@ ApplicationWindow {
             palette.mid: Theme.border
 
             Action {
-                text: qsTr("&Nouveau")
+                text: qsTr("&New")
                 shortcut: StandardKey.New
                 onTriggered: {
                     graph.clear()
@@ -57,14 +57,14 @@ ApplicationWindow {
             MenuSeparator {}
 
             Action {
-                text: qsTr("&Quitter")
+                text: qsTr("&Quit")
                 shortcut: StandardKey.Quit
                 onTriggered: Qt.quit()
             }
         }
 
         Menu {
-            title: qsTr("&Edition")
+            title: qsTr("&Edit")
             palette.window: Theme.surface
             palette.windowText: Theme.text
             palette.base: Theme.surface
@@ -76,22 +76,13 @@ ApplicationWindow {
             palette.mid: Theme.border
 
             Action {
-                text: qsTr("&Supprimer")
-                shortcut: StandardKey.Delete
-                onTriggered: {
-                    var selected = graph.selectedNodes()
-                    for (var i = 0; i < selected.length; ++i) {
-                        // Ne pas supprimer Input/Output
-                        if (selected[i].type !== "Input" && selected[i].type !== "Output") {
-                            graph.removeNode(selected[i].uuid)
-                        }
-                    }
-                }
+                text: qsTr("&Delete")
+                onTriggered: canvas.deleteSelected()
             }
         }
 
         Menu {
-            title: qsTr("&Affichage")
+            title: qsTr("&View")
             palette.window: Theme.surface
             palette.windowText: Theme.text
             palette.base: Theme.surface
@@ -103,7 +94,7 @@ ApplicationWindow {
             palette.mid: Theme.border
 
             Action {
-                text: qsTr("Afficher la grille")
+                text: qsTr("Show Grid")
                 checkable: true
                 checked: showGrid
                 onTriggered: showGrid = !showGrid
@@ -135,7 +126,7 @@ ApplicationWindow {
             }
 
             Label {
-                text: qsTr("Connexions: %1").arg(graph.connectionCount)
+                text: qsTr("Connections: %1").arg(graph.connectionCount)
                 color: Theme.text
                 font.pixelSize: Theme.fontSizeSmall
             }

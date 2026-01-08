@@ -89,6 +89,9 @@ Rectangle {
         drag.threshold: 0
 
         onPressed: function(mouse) {
+            // Clear connection selection when clicking on a node
+            if (canvas) canvas.selectedConnection = null
+
             if (!(mouse.modifiers & Qt.ControlModifier)) {
                 graph.clearSelection()
             }
