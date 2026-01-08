@@ -51,15 +51,10 @@ void GroupNode::setInvert(bool inv)
 
 void GroupNode::updateInputPorts()
 {
-    // Remove existing input ports
-    auto currentInputs = inputs();
-    for (auto port : currentInputs)
-    {
-        port->deleteLater();
-    }
+    // Clear existing input ports
+    clearInputs();
 
-    // Clear internal list (handled by Node base class through parent deletion)
-    // We need to recreate them
+    // Create new input ports
     for (int i = 0; i < _ratioInputCount; ++i)
     {
         addInput(QStringLiteral("ratio%1").arg(i + 1), Port::DataType::Ratio2D);

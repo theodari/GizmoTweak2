@@ -69,6 +69,24 @@ Port* Node::addOutput(const QString& name, Port::DataType dataType)
     return port;
 }
 
+void Node::clearInputs()
+{
+    for (auto port : _inputs)
+    {
+        port->deleteLater();
+    }
+    _inputs.clear();
+}
+
+void Node::clearOutputs()
+{
+    for (auto port : _outputs)
+    {
+        port->deleteLater();
+    }
+    _outputs.clear();
+}
+
 QQmlListProperty<Port> Node::inputsProperty()
 {
     return QQmlListProperty<Port>(this, &_inputs, &portCount, &portAt);

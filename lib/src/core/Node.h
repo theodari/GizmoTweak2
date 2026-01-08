@@ -71,6 +71,8 @@ signals:
 protected:
     Port* addInput(const QString& name, Port::DataType dataType);
     Port* addOutput(const QString& name, Port::DataType dataType);
+    void clearInputs();
+    void clearOutputs();
 
 private:
     QQmlListProperty<Port> inputsProperty();

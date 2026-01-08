@@ -22,19 +22,6 @@ ApplicationWindow {
         graph.createNode("Output", Qt.point(1000, 500))
     }
 
-    // Common menu palette
-    property var menuPalette: ({
-        window: Theme.surface,
-        windowText: Theme.text,
-        base: Theme.surface,
-        text: Theme.text,
-        highlight: Theme.menuHighlight,
-        highlightedText: Theme.text,
-        button: Theme.surface,
-        buttonText: Theme.text,
-        mid: Theme.border
-    })
-
     menuBar: MenuBar {
         palette.window: Theme.backgroundLight
         palette.windowText: Theme.text
@@ -47,7 +34,15 @@ ApplicationWindow {
 
         Menu {
             title: qsTr("&Fichier")
-            palette: root.menuPalette
+            palette.window: Theme.surface
+            palette.windowText: Theme.text
+            palette.base: Theme.surface
+            palette.text: Theme.text
+            palette.highlight: Theme.menuHighlight
+            palette.highlightedText: Theme.text
+            palette.button: Theme.surface
+            palette.buttonText: Theme.text
+            palette.mid: Theme.border
 
             Action {
                 text: qsTr("&Nouveau")
@@ -70,7 +65,15 @@ ApplicationWindow {
 
         Menu {
             title: qsTr("&Edition")
-            palette: root.menuPalette
+            palette.window: Theme.surface
+            palette.windowText: Theme.text
+            palette.base: Theme.surface
+            palette.text: Theme.text
+            palette.highlight: Theme.menuHighlight
+            palette.highlightedText: Theme.text
+            palette.button: Theme.surface
+            palette.buttonText: Theme.text
+            palette.mid: Theme.border
 
             Action {
                 text: qsTr("&Supprimer")
@@ -89,7 +92,15 @@ ApplicationWindow {
 
         Menu {
             title: qsTr("&Affichage")
-            palette: root.menuPalette
+            palette.window: Theme.surface
+            palette.windowText: Theme.text
+            palette.base: Theme.surface
+            palette.text: Theme.text
+            palette.highlight: Theme.menuHighlight
+            palette.highlightedText: Theme.text
+            palette.button: Theme.surface
+            palette.buttonText: Theme.text
+            palette.mid: Theme.border
 
             Action {
                 text: qsTr("Afficher la grille")

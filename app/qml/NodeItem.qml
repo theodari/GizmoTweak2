@@ -8,6 +8,7 @@ Rectangle {
 
     property Node nodeData: null
     required property NodeGraph graph
+    property var canvas: null  // Reference to NodeCanvas for collision detection
 
     // Connection dragging state (passed from NodeCanvas)
     property bool connectionDragging: false
@@ -26,8 +27,17 @@ Rectangle {
     border.color: nodeData && nodeData.selected ? Theme.accent : Theme.border
     border.width: nodeData && nodeData.selected ? 2 : 1
 
-    // Node background color based on category
-    color: !nodeData ? Theme.surface : (nodeData.category === Node.IO ? Theme.nodeIO : (nodeData.category === Node.Shape ? Theme.nodeShape : (nodeData.category === Node.Utility ? Theme.nodeUtility : (nodeData.category === Node.Tweak ? Theme.nodeTweak : Theme.surface))))
+    // Node background color based on category and type
+    color: {
+        if (!nodeData) return Theme.surface
+        if (nodeData.category === Node.IO) return Theme.nodeIO
+        if (nodeData.category === Node.Shape) {
+            return nodeData.type === "Group" ? Theme.nodeGroup : Theme.nodeShape
+        }
+        if (nodeData.category === Node.Utility) return Theme.nodeUtility
+        if (nodeData.category === Node.Tweak) return Theme.nodeTweak
+        return Theme.surface
+    }
 
     // Determine layout type based on category
     readonly property bool isIONode: nodeData && (nodeData.category === Node.IO)
@@ -92,13 +102,21 @@ Rectangle {
         }
 
         onReleased: {
-            // Snap to grid
             if (nodeData) {
-                var gridSize = 20
-                nodeData.position = Qt.point(
-                    Math.round(root.x / gridSize) * gridSize,
-                    Math.round(root.y / gridSize) * gridSize
-                )
+                var desiredPos = Qt.point(root.x, root.y)
+
+                // Use canvas collision detection if available
+                if (canvas && typeof canvas.findValidPosition === 'function') {
+                    var validPos = canvas.findValidPosition(nodeData.uuid, desiredPos, root.width, root.height)
+                    nodeData.position = validPos
+                } else {
+                    // Fallback: just snap to grid
+                    var gridSize = 20
+                    nodeData.position = Qt.point(
+                        Math.round(root.x / gridSize) * gridSize,
+                        Math.round(root.y / gridSize) * gridSize
+                    )
+                }
             }
         }
     }
@@ -172,6 +190,7 @@ Rectangle {
                 required property int index
                 port: !nodeData ? null : (isShapeOrUtility ? nodeData.inputAt(index) : (isTweak ? getRatioInput() : null))
                 isInput: true
+                showLabel: false
                 connectionDragging: root.connectionDragging
                 dragPosition: root.dragPosition
 
@@ -198,6 +217,7 @@ Rectangle {
                 required property int index
                 port: nodeData ? nodeData.outputAt(index) : null
                 isInput: false
+                showLabel: false
                 connectionDragging: root.connectionDragging
                 dragPosition: root.dragPosition
 

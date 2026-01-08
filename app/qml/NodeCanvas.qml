@@ -23,18 +23,61 @@ Item {
     // Context menu position
     property point contextMenuPosition: Qt.point(0, 0)
 
-    // Common menu palette
-    property var menuPalette: ({
-        window: Theme.surface,
-        windowText: Theme.text,
-        base: Theme.surface,
-        text: Theme.text,
-        highlight: Theme.menuHighlight,
-        highlightedText: Theme.text,
-        button: Theme.surface,
-        buttonText: Theme.text,
-        mid: Theme.border
-    })
+    // Find non-overlapping position for a node
+    function findValidPosition(nodeUuid, desiredPos, nodeWidth, nodeHeight) {
+        var margin = 10
+        var pos = Qt.point(desiredPos.x, desiredPos.y)
+
+        // Check collision with all other nodes
+        for (var i = 0; i < nodesRepeater.count; i++) {
+            var otherItem = nodesRepeater.itemAt(i)
+            if (!otherItem || !otherItem.nodeData) continue
+            if (otherItem.nodeData.uuid === nodeUuid) continue
+
+            var otherX = otherItem.x
+            var otherY = otherItem.y
+            var otherW = otherItem.width
+            var otherH = otherItem.height
+
+            // Check for overlap
+            if (pos.x < otherX + otherW + margin &&
+                pos.x + nodeWidth + margin > otherX &&
+                pos.y < otherY + otherH + margin &&
+                pos.y + nodeHeight + margin > otherY) {
+
+                // Collision detected - try to find closest non-overlapping position
+                var dx = (pos.x + nodeWidth / 2) - (otherX + otherW / 2)
+                var dy = (pos.y + nodeHeight / 2) - (otherY + otherH / 2)
+
+                // Move in the direction we came from
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    // Move horizontally
+                    if (dx > 0) {
+                        pos.x = otherX + otherW + margin
+                    } else {
+                        pos.x = otherX - nodeWidth - margin
+                    }
+                } else {
+                    // Move vertically
+                    if (dy > 0) {
+                        pos.y = otherY + otherH + margin
+                    } else {
+                        pos.y = otherY - nodeHeight - margin
+                    }
+                }
+
+                // Restart check with new position
+                i = -1
+            }
+        }
+
+        // Snap to grid
+        var gridSnap = 20
+        pos.x = Math.round(pos.x / gridSnap) * gridSnap
+        pos.y = Math.round(pos.y / gridSnap) * gridSnap
+
+        return pos
+    }
 
     // Find port at position (hit-testing)
     function findPortAtPosition(pos) {
@@ -197,6 +240,7 @@ Item {
                 required property var node
                 nodeData: node
                 graph: root.graph
+                canvas: root
                 connectionDragging: root.isDraggingConnection
                 dragPosition: root.dragEndPoint
 
@@ -231,11 +275,27 @@ Item {
     // Context menu for creating nodes
     Menu {
         id: contextMenu
-        palette: root.menuPalette
+        palette.window: Theme.surface
+        palette.windowText: Theme.text
+        palette.base: Theme.surface
+        palette.text: Theme.text
+        palette.highlight: Theme.menuHighlight
+        palette.highlightedText: Theme.text
+        palette.button: Theme.surface
+        palette.buttonText: Theme.text
+        palette.mid: Theme.border
 
         Menu {
             title: qsTr("Shapes")
-            palette: root.menuPalette
+            palette.window: Theme.surface
+            palette.windowText: Theme.text
+            palette.base: Theme.surface
+            palette.text: Theme.text
+            palette.highlight: Theme.menuHighlight
+            palette.highlightedText: Theme.text
+            palette.button: Theme.surface
+            palette.buttonText: Theme.text
+            palette.mid: Theme.border
 
             Action {
                 text: qsTr("Gizmo")
@@ -255,7 +315,15 @@ Item {
 
         Menu {
             title: qsTr("Tweaks")
-            palette: root.menuPalette
+            palette.window: Theme.surface
+            palette.windowText: Theme.text
+            palette.base: Theme.surface
+            palette.text: Theme.text
+            palette.highlight: Theme.menuHighlight
+            palette.highlightedText: Theme.text
+            palette.button: Theme.surface
+            palette.buttonText: Theme.text
+            palette.mid: Theme.border
 
             Action {
                 text: qsTr("Position")
@@ -280,7 +348,15 @@ Item {
 
         Menu {
             title: qsTr("Utility")
-            palette: root.menuPalette
+            palette.window: Theme.surface
+            palette.windowText: Theme.text
+            palette.base: Theme.surface
+            palette.text: Theme.text
+            palette.highlight: Theme.menuHighlight
+            palette.highlightedText: Theme.text
+            palette.button: Theme.surface
+            palette.buttonText: Theme.text
+            palette.mid: Theme.border
 
             Action {
                 text: qsTr("TimeShift")
