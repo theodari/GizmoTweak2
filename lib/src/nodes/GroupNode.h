@@ -26,7 +26,7 @@ public:
     Q_ENUM(CompositionMode)
 
     Q_PROPERTY(CompositionMode compositionMode READ compositionMode WRITE setCompositionMode NOTIFY compositionModeChanged)
-    Q_PROPERTY(int inputCount READ ratioInputCount WRITE setRatioInputCount NOTIFY inputCountChanged)
+    Q_PROPERTY(int ratioInputCount READ ratioInputCount WRITE setRatioInputCount NOTIFY ratioInputCountChanged)
     Q_PROPERTY(bool invert READ invert WRITE setInvert NOTIFY invertChanged)
 
 public:
@@ -51,7 +51,7 @@ public:
 
 signals:
     void compositionModeChanged();
-    void inputCountChanged();
+    void ratioInputCountChanged();
     void invertChanged();
 
 private:

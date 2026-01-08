@@ -39,7 +39,7 @@ void GroupNode::setRatioInputCount(int count)
     {
         _ratioInputCount = count;
         updateInputPorts();
-        emit inputCountChanged();
+        emit ratioInputCountChanged();
     }
 }
 
