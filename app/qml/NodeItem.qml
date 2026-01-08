@@ -183,6 +183,15 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         spacing: 4
 
+        Component.onCompleted: {
+            if (nodeData) {
+                console.log("LEFT PORTS - Node:", nodeData.type,
+                    "isShapeOrUtility:", isShapeOrUtility,
+                    "hasLeftPorts:", hasLeftPorts,
+                    "inputCount:", typeof nodeData.inputCount === 'function' ? nodeData.inputCount() : "N/A")
+            }
+        }
+
         Repeater {
             model: (!nodeData || typeof nodeData.inputCount !== 'function') ? 0 : (isShapeOrUtility ? nodeData.inputCount() : (isTweak && getRatioInput() ? 1 : 0))
 
