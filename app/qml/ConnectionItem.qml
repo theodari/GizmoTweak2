@@ -14,7 +14,7 @@ Shape {
     property point startPos: visible ? mapFromItem(null, connection.sourcePort.scenePosition.x, connection.sourcePort.scenePosition.y) : Qt.point(0, 0)
     property point endPos: visible ? mapFromItem(null, connection.targetPort.scenePosition.x, connection.targetPort.scenePosition.y) : Qt.point(0, 0)
 
-    property color cableColor: !visible ? Theme.border : (connection.sourcePort.dataType === Port.Frame ? Theme.cableFrame : (connection.sourcePort.dataType === Port.Ratio2D ? Theme.cableRatio2D : (connection.sourcePort.dataType === Port.Ratio1D ? Theme.cableRatio1D : Theme.border)))
+    property color cableColor: !visible ? Theme.border : (connection.sourcePort.dataType === Port.DataType.Frame ? Theme.cableFrame : (connection.sourcePort.dataType === Port.DataType.Ratio2D ? Theme.cableRatio2D : (connection.sourcePort.dataType === Port.DataType.Ratio1D ? Theme.cableRatio1D : Theme.border)))
 
     // Recalculate on port position changes
     Connections {

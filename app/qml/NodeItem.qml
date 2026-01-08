@@ -30,19 +30,19 @@ Rectangle {
     // Node background color based on category and type
     color: {
         if (!nodeData) return Theme.surface
-        if (nodeData.category === Node.IO) return Theme.nodeIO
-        if (nodeData.category === Node.Shape) {
+        if (nodeData.category === Node.Category.IO) return Theme.nodeIO
+        if (nodeData.category === Node.Category.Shape) {
             return nodeData.type === "Group" ? Theme.nodeGroup : Theme.nodeShape
         }
-        if (nodeData.category === Node.Utility) return Theme.nodeUtility
-        if (nodeData.category === Node.Tweak) return Theme.nodeTweak
+        if (nodeData.category === Node.Category.Utility) return Theme.nodeUtility
+        if (nodeData.category === Node.Category.Tweak) return Theme.nodeTweak
         return Theme.surface
     }
 
     // Determine layout type based on category
-    readonly property bool isIONode: nodeData && (nodeData.category === Node.IO)
-    readonly property bool isShapeOrUtility: nodeData && (nodeData.category === Node.Shape || nodeData.category === Node.Utility)
-    readonly property bool isTweak: nodeData && (nodeData.category === Node.Tweak)
+    readonly property bool isIONode: nodeData && (nodeData.category === Node.Category.IO)
+    readonly property bool isShapeOrUtility: nodeData && (nodeData.category === Node.Category.Shape || nodeData.category === Node.Category.Utility)
+    readonly property bool isTweak: nodeData && (nodeData.category === Node.Category.Tweak)
 
     // Determine which sides have ports
     readonly property bool hasTopPorts: nodeData && typeof nodeData.inputCount === 'function' ? (nodeData.type === "Output" ? nodeData.inputCount() > 0 : (isTweak ? getFrameInput() !== null : false)) : false
@@ -56,7 +56,7 @@ Rectangle {
         var count = nodeData.inputCount()
         for (var i = 0; i < count; i++) {
             var port = nodeData.inputAt(i)
-            if (port && port.dataType === Port.Frame) return port
+            if (port && port.dataType === Port.DataType.Frame) return port
         }
         return null
     }
@@ -66,7 +66,7 @@ Rectangle {
         var count = nodeData.outputCount()
         for (var i = 0; i < count; i++) {
             var port = nodeData.outputAt(i)
-            if (port && port.dataType === Port.Frame) return port
+            if (port && port.dataType === Port.DataType.Frame) return port
         }
         return null
     }
@@ -76,7 +76,7 @@ Rectangle {
         var count = nodeData.inputCount()
         for (var i = 0; i < count; i++) {
             var port = nodeData.inputAt(i)
-            if (port && (port.dataType === Port.Ratio2D || port.dataType === Port.Ratio1D)) return port
+            if (port && (port.dataType === Port.DataType.Ratio2D || port.dataType === Port.DataType.Ratio1D)) return port
         }
         return null
     }
@@ -182,17 +182,6 @@ Rectangle {
         anchors.leftMargin: -Theme.portRadius
         anchors.verticalCenter: parent.verticalCenter
         spacing: 4
-
-        Component.onCompleted: {
-            if (nodeData) {
-                console.log("LEFT PORTS - Node:", nodeData.type,
-                    "category:", nodeData.category,
-                    "Node.Shape:", Node.Shape,
-                    "isShapeOrUtility:", isShapeOrUtility,
-                    "hasLeftPorts:", hasLeftPorts,
-                    "inputCount:", typeof nodeData.inputCount === 'function' ? nodeData.inputCount() : "N/A")
-            }
-        }
 
         Repeater {
             model: (!nodeData || typeof nodeData.inputCount !== 'function') ? 0 : (isShapeOrUtility ? nodeData.inputCount() : (isTweak && getRatioInput() ? 1 : 0))

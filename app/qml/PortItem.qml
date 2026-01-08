@@ -44,7 +44,7 @@ Item {
         height: Theme.portRadius * 2
         radius: Theme.portRadius
 
-        color: !port ? Theme.border : (port.dataType === Port.Frame ? Theme.portFrame : (port.dataType === Port.Ratio2D ? Theme.portRatio2D : (port.dataType === Port.Ratio1D ? Theme.portRatio1D : Theme.border)))
+        color: !port ? Theme.border : (port.dataType === Port.DataType.Frame ? Theme.portFrame : (port.dataType === Port.DataType.Ratio2D ? Theme.portRatio2D : (port.dataType === Port.DataType.Ratio1D ? Theme.portRatio1D : Theme.border)))
 
         // Highlight on hover OR when drag is over this port
         border.color: (portMouseArea.containsMouse || isDragOver) ? Theme.text : "transparent"
