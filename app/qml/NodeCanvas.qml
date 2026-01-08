@@ -372,27 +372,25 @@ Item {
     // Context menu for creating nodes
     Menu {
         id: contextMenu
-        palette.window: Theme.surface
-        palette.windowText: Theme.text
-        palette.base: Theme.surface
-        palette.text: Theme.text
-        palette.highlight: Theme.menuHighlight
-        palette.highlightedText: Theme.text
-        palette.button: Theme.surface
-        palette.buttonText: Theme.text
-        palette.mid: Theme.border
+        delegate: StyledMenuItem {}
+
+        background: Rectangle {
+            implicitWidth: 150
+            color: Theme.surface
+            border.color: Theme.border
+            radius: 2
+        }
 
         Menu {
             title: qsTr("Shapes")
-            palette.window: Theme.surface
-            palette.windowText: Theme.text
-            palette.base: Theme.surface
-            palette.text: Theme.text
-            palette.highlight: Theme.menuHighlight
-            palette.highlightedText: Theme.text
-            palette.button: Theme.surface
-            palette.buttonText: Theme.text
-            palette.mid: Theme.border
+            delegate: StyledMenuItem {}
+
+            background: Rectangle {
+                implicitWidth: 150
+                color: Theme.surface
+                border.color: Theme.border
+                radius: 2
+            }
 
             Action {
                 text: qsTr("Gizmo")
@@ -412,15 +410,14 @@ Item {
 
         Menu {
             title: qsTr("Tweaks")
-            palette.window: Theme.surface
-            palette.windowText: Theme.text
-            palette.base: Theme.surface
-            palette.text: Theme.text
-            palette.highlight: Theme.menuHighlight
-            palette.highlightedText: Theme.text
-            palette.button: Theme.surface
-            palette.buttonText: Theme.text
-            palette.mid: Theme.border
+            delegate: StyledMenuItem {}
+
+            background: Rectangle {
+                implicitWidth: 150
+                color: Theme.surface
+                border.color: Theme.border
+                radius: 2
+            }
 
             Action {
                 text: qsTr("Position")
@@ -445,15 +442,14 @@ Item {
 
         Menu {
             title: qsTr("Utility")
-            palette.window: Theme.surface
-            palette.windowText: Theme.text
-            palette.base: Theme.surface
-            palette.text: Theme.text
-            palette.highlight: Theme.menuHighlight
-            palette.highlightedText: Theme.text
-            palette.button: Theme.surface
-            palette.buttonText: Theme.text
-            palette.mid: Theme.border
+            delegate: StyledMenuItem {}
+
+            background: Rectangle {
+                implicitWidth: 150
+                color: Theme.surface
+                border.color: Theme.border
+                radius: 2
+            }
 
             Action {
                 text: qsTr("TimeShift")

@@ -3,6 +3,8 @@
 #include <QAbstractListModel>
 #include <QList>
 #include <QJsonObject>
+#include <QPointF>
+#include <QUndoStack>
 #include <QtQml/qqmlregistration.h>
 
 namespace gizmotweak2
@@ -20,6 +22,10 @@ class NodeGraph : public QAbstractListModel
     Q_PROPERTY(int nodeCount READ nodeCount NOTIFY nodeCountChanged)
     Q_PROPERTY(int connectionCount READ connectionCount NOTIFY connectionCountChanged)
     Q_PROPERTY(QList<Connection*> connections READ connections NOTIFY connectionsChanged)
+    Q_PROPERTY(bool canUndo READ canUndo NOTIFY canUndoChanged)
+    Q_PROPERTY(bool canRedo READ canRedo NOTIFY canRedoChanged)
+    Q_PROPERTY(QString undoText READ undoText NOTIFY undoTextChanged)
+    Q_PROPERTY(QString redoText READ redoText NOTIFY redoTextChanged)
 
 public:
     enum Roles
@@ -47,6 +53,12 @@ public:
     int connectionCount() const { return _connections.size(); }
     QList<Connection*> connections() const { return _connections; }
 
+    // Undo/Redo properties
+    bool canUndo() const { return _undoStack.canUndo(); }
+    bool canRedo() const { return _undoStack.canRedo(); }
+    QString undoText() const { return _undoStack.undoText(); }
+    QString redoText() const { return _undoStack.redoText(); }
+
     // Node factory
     Q_INVOKABLE Node* createNode(const QString& type, QPointF position);
     Q_INVOKABLE QStringList availableNodeTypes() const;
@@ -69,6 +81,22 @@ public:
     Q_INVOKABLE bool fromJson(const QJsonObject& json);
     Q_INVOKABLE void clear();
 
+    // Undo/Redo
+    Q_INVOKABLE void undo();
+    Q_INVOKABLE void redo();
+    Q_INVOKABLE void clearUndoStack();
+
+    // Move tracking for undo
+    Q_INVOKABLE void beginMoveNode(const QString& uuid);
+    Q_INVOKABLE void endMoveNode(const QString& uuid, QPointF newPos);
+
+    // Internal methods (used by undo commands)
+    Node* createNodeInternal(const QString& type, QPointF position);
+    void removeNodeInternal(const QString& uuid);
+    Connection* connectInternal(Port* source, Port* target);
+    void disconnectInternal(Connection* connection);
+    void disconnectPortInternal(Port* port);
+
 signals:
     void nodeCountChanged();
     void connectionCountChanged();
@@ -77,10 +105,21 @@ signals:
     void nodeRemoved(const QString& uuid);
     void connectionAdded(Connection* connection);
     void connectionRemoved(Connection* connection);
+    void canUndoChanged();
+    void canRedoChanged();
+    void undoTextChanged();
+    void redoTextChanged();
 
 private:
+    void connectUndoSignals();
+
     QList<Node*> _nodes;
     QList<Connection*> _connections;
+    QUndoStack _undoStack;
+
+    // Move tracking
+    QString _movingNodeUuid;
+    QPointF _moveStartPos;
 };
 
 } // namespace gizmotweak2

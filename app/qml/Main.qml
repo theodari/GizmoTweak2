@@ -23,6 +23,7 @@ ApplicationWindow {
     Component.onCompleted: {
         graph.createNode("Input", Qt.point(1000, 100))
         graph.createNode("Output", Qt.point(1000, 500))
+        graph.clearUndoStack()  // Clear undo after creating initial nodes
     }
 
     // File operations
@@ -30,6 +31,7 @@ ApplicationWindow {
         graph.clear()
         graph.createNode("Input", Qt.point(1000, 100))
         graph.createNode("Output", Qt.point(1000, 500))
+        graph.clearUndoStack()  // Clear undo after creating initial nodes
         currentFile = ""
     }
 
@@ -45,6 +47,7 @@ ApplicationWindow {
         if (jsonString) {
             var json = JSON.parse(jsonString)
             graph.fromJson(json)
+            graph.clearUndoStack()  // Clear undo after loading
             currentFile = FileIO.urlToLocalFile(fileUrl)
         }
     }
@@ -72,21 +75,20 @@ ApplicationWindow {
         palette.base: Theme.backgroundLight
         palette.text: Theme.text
         palette.highlight: Theme.menuHighlight
-        palette.highlightedText: Theme.text
+        palette.highlightedText: Theme.textOnHighlight
         palette.button: Theme.backgroundLight
         palette.buttonText: Theme.text
 
         Menu {
             title: qsTr("&File")
-            palette.window: Theme.surface
-            palette.windowText: Theme.text
-            palette.base: Theme.surface
-            palette.text: Theme.text
-            palette.highlight: Theme.menuHighlight
-            palette.highlightedText: Theme.text
-            palette.button: Theme.surface
-            palette.buttonText: Theme.text
-            palette.mid: Theme.border
+            delegate: StyledMenuItem {}
+
+            background: Rectangle {
+                implicitWidth: 200
+                color: Theme.surface
+                border.color: Theme.border
+                radius: 2
+            }
 
             Action {
                 text: qsTr("&New")
@@ -129,15 +131,30 @@ ApplicationWindow {
 
         Menu {
             title: qsTr("&Edit")
-            palette.window: Theme.surface
-            palette.windowText: Theme.text
-            palette.base: Theme.surface
-            palette.text: Theme.text
-            palette.highlight: Theme.menuHighlight
-            palette.highlightedText: Theme.text
-            palette.button: Theme.surface
-            palette.buttonText: Theme.text
-            palette.mid: Theme.border
+            delegate: StyledMenuItem {}
+
+            background: Rectangle {
+                implicitWidth: 200
+                color: Theme.surface
+                border.color: Theme.border
+                radius: 2
+            }
+
+            Action {
+                text: graph.undoText ? qsTr("&Undo %1").arg(graph.undoText) : qsTr("&Undo")
+                shortcut: StandardKey.Undo
+                enabled: graph.canUndo
+                onTriggered: graph.undo()
+            }
+
+            Action {
+                text: graph.redoText ? qsTr("&Redo %1").arg(graph.redoText) : qsTr("&Redo")
+                shortcut: StandardKey.Redo
+                enabled: graph.canRedo
+                onTriggered: graph.redo()
+            }
+
+            MenuSeparator {}
 
             Action {
                 text: qsTr("&Delete")
@@ -147,15 +164,14 @@ ApplicationWindow {
 
         Menu {
             title: qsTr("&View")
-            palette.window: Theme.surface
-            palette.windowText: Theme.text
-            palette.base: Theme.surface
-            palette.text: Theme.text
-            palette.highlight: Theme.menuHighlight
-            palette.highlightedText: Theme.text
-            palette.button: Theme.surface
-            palette.buttonText: Theme.text
-            palette.mid: Theme.border
+            delegate: StyledMenuItem {}
+
+            background: Rectangle {
+                implicitWidth: 200
+                color: Theme.surface
+                border.color: Theme.border
+                radius: 2
+            }
 
             Action {
                 text: qsTr("Show Grid")

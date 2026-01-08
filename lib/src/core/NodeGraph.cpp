@@ -2,6 +2,7 @@
 #include "Node.h"
 #include "Port.h"
 #include "Connection.h"
+#include "Commands.h"
 #include "nodes/InputNode.h"
 #include "nodes/OutputNode.h"
 #include "nodes/GizmoNode.h"
@@ -21,6 +22,15 @@ namespace gizmotweak2
 NodeGraph::NodeGraph(QObject* parent)
     : QAbstractListModel(parent)
 {
+    connectUndoSignals();
+}
+
+void NodeGraph::connectUndoSignals()
+{
+    QObject::connect(&_undoStack, &QUndoStack::canUndoChanged, this, &NodeGraph::canUndoChanged);
+    QObject::connect(&_undoStack, &QUndoStack::canRedoChanged, this, &NodeGraph::canRedoChanged);
+    QObject::connect(&_undoStack, &QUndoStack::undoTextChanged, this, &NodeGraph::undoTextChanged);
+    QObject::connect(&_undoStack, &QUndoStack::redoTextChanged, this, &NodeGraph::redoTextChanged);
 }
 
 int NodeGraph::rowCount(const QModelIndex& parent) const
@@ -104,6 +114,13 @@ QHash<int, QByteArray> NodeGraph::roleNames() const
 }
 
 Node* NodeGraph::createNode(const QString& type, QPointF position)
+{
+    auto cmd = new CreateNodeCommand(this, type, position);
+    _undoStack.push(cmd);
+    return nodeByUuid(cmd->nodeUuid());
+}
+
+Node* NodeGraph::createNodeInternal(const QString& type, QPointF position)
 {
     Node* node = nullptr;
 
@@ -192,6 +209,15 @@ void NodeGraph::addNode(Node* node)
 
 void NodeGraph::removeNode(const QString& uuid)
 {
+    auto node = nodeByUuid(uuid);
+    if (node)
+    {
+        _undoStack.push(new DeleteNodeCommand(this, uuid));
+    }
+}
+
+void NodeGraph::removeNodeInternal(const QString& uuid)
+{
     for (int i = 0; i < _nodes.size(); ++i)
     {
         if (_nodes.at(i)->uuid() == uuid)
@@ -201,11 +227,11 @@ void NodeGraph::removeNode(const QString& uuid)
             // Remove all connections to/from this node
             for (auto port : node->inputs())
             {
-                disconnectPort(port);
+                disconnectPortInternal(port);
             }
             for (auto port : node->outputs())
             {
-                disconnectPort(port);
+                disconnectPortInternal(port);
             }
 
             beginRemoveRows(QModelIndex(), i, i);
@@ -218,6 +244,28 @@ void NodeGraph::removeNode(const QString& uuid)
             node->deleteLater();
             return;
         }
+    }
+}
+
+void NodeGraph::disconnectPortInternal(Port* port)
+{
+    if (!port)
+    {
+        return;
+    }
+
+    QList<Connection*> toRemove;
+    for (auto conn : _connections)
+    {
+        if (conn->sourcePort() == port || conn->targetPort() == port)
+        {
+            toRemove.append(conn);
+        }
+    }
+
+    for (auto conn : toRemove)
+    {
+        disconnectInternal(conn);
     }
 }
 
@@ -266,6 +314,44 @@ Connection* NodeGraph::connect(Port* source, Port* target)
         return nullptr;
     }
 
+    // Ensure source is Out and target is In
+    if (source->direction() == Port::Direction::In)
+    {
+        std::swap(source, target);
+    }
+
+    // Check if connection already exists
+    for (auto conn : _connections)
+    {
+        if ((conn->sourcePort() == source && conn->targetPort() == target) ||
+            (conn->sourcePort() == target && conn->targetPort() == source))
+        {
+            return nullptr;
+        }
+    }
+
+    _undoStack.push(new ConnectCommand(this,
+        source->node()->uuid(), source->name(),
+        target->node()->uuid(), target->name()));
+
+    // Find and return the new connection
+    for (auto conn : _connections)
+    {
+        if (conn->sourcePort() == source && conn->targetPort() == target)
+        {
+            return conn;
+        }
+    }
+    return nullptr;
+}
+
+Connection* NodeGraph::connectInternal(Port* source, Port* target)
+{
+    if (!Connection::isValid(source, target))
+    {
+        return nullptr;
+    }
+
     // Check if connection already exists
     for (auto conn : _connections)
     {
@@ -293,6 +379,16 @@ Connection* NodeGraph::connect(Port* source, Port* target)
 }
 
 void NodeGraph::disconnect(Connection* connection)
+{
+    if (!connection || !_connections.contains(connection))
+    {
+        return;
+    }
+
+    _undoStack.push(new DisconnectCommand(this, connection));
+}
+
+void NodeGraph::disconnectInternal(Connection* connection)
 {
     if (!connection || !_connections.contains(connection))
     {
@@ -513,10 +609,13 @@ bool NodeGraph::fromJson(const QJsonObject& json)
 
 void NodeGraph::clear()
 {
-    // Remove all connections first
+    // Clear undo stack first
+    _undoStack.clear();
+
+    // Remove all connections first (internally, without undo)
     while (!_connections.isEmpty())
     {
-        disconnect(_connections.first());
+        disconnectInternal(_connections.first());
     }
 
     // Remove all nodes
@@ -530,6 +629,43 @@ void NodeGraph::clear()
     endResetModel();
 
     emit nodeCountChanged();
+}
+
+void NodeGraph::undo()
+{
+    _undoStack.undo();
+}
+
+void NodeGraph::redo()
+{
+    _undoStack.redo();
+}
+
+void NodeGraph::clearUndoStack()
+{
+    _undoStack.clear();
+}
+
+void NodeGraph::beginMoveNode(const QString& uuid)
+{
+    auto node = nodeByUuid(uuid);
+    if (node)
+    {
+        _movingNodeUuid = uuid;
+        _moveStartPos = node->position();
+    }
+}
+
+void NodeGraph::endMoveNode(const QString& uuid, QPointF newPos)
+{
+    if (_movingNodeUuid == uuid && !_movingNodeUuid.isEmpty())
+    {
+        if (_moveStartPos != newPos)
+        {
+            _undoStack.push(new MoveNodeCommand(this, uuid, _moveStartPos, newPos));
+        }
+        _movingNodeUuid.clear();
+    }
 }
 
 } // namespace gizmotweak2

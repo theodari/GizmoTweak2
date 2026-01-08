@@ -9,6 +9,7 @@ set(LIB_SOURCES
     src/core/Node.cpp
     src/core/Connection.cpp
     src/core/NodeGraph.cpp
+    src/core/Commands.cpp
     src/nodes/InputNode.cpp
     src/nodes/OutputNode.cpp
     src/nodes/GizmoNode.cpp
@@ -27,6 +28,7 @@ set(LIB_HEADERS
     src/core/Node.h
     src/core/Connection.h
     src/core/NodeGraph.h
+    src/core/Commands.h
     src/nodes/InputNode.h
     src/nodes/OutputNode.h
     src/nodes/GizmoNode.h

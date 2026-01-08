@@ -1,5 +1,6 @@
 #include "FileIO.h"
 
+#include <QDebug>
 #include <QFile>
 #include <QTextStream>
 

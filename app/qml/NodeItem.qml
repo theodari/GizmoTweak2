@@ -97,6 +97,8 @@ Rectangle {
         drag.threshold: 0
         hoverEnabled: true
 
+        property bool isDragging: false
+
         onPressed: function(mouse) {
             // Clear connection selection when clicking on a node
             if (canvas) canvas.selectedConnection = null
@@ -110,11 +112,14 @@ Rectangle {
                     canvas.selectedNode = nodeData
                     canvas.selectionChanged()
                 }
+                // Track move start for undo
+                graph.beginMoveNode(nodeData.uuid)
             }
         }
 
         onPositionChanged: {
             if (drag.active) {
+                isDragging = true
                 if (nodeData) nodeData.position = Qt.point(root.x, root.y)
             }
         }
@@ -134,6 +139,12 @@ Rectangle {
                         Math.round(root.x / gridSize) * gridSize,
                         Math.round(root.y / gridSize) * gridSize
                     )
+                }
+
+                // Track move end for undo (only if we actually dragged)
+                if (isDragging) {
+                    graph.endMoveNode(nodeData.uuid, nodeData.position)
+                    isDragging = false
                 }
             }
         }

@@ -24,9 +24,15 @@ qt_add_qml_module(GizmoTweak2
         qml/ConnectionItem.qml
         qml/ConnectionPreview.qml
         qml/PropertiesPanel.qml
+        qml/StyledMenuItem.qml
     SOURCES
         src/FileIO.h
         src/FileIO.cpp
+)
+
+target_include_directories(GizmoTweak2
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_link_libraries(GizmoTweak2

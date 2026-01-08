@@ -20,6 +20,7 @@ QtObject {
     readonly property color text: "#FFFFFF"
     readonly property color textMuted: "#666666"
     readonly property color textHighlight: "#00FFFF"
+    readonly property color textOnHighlight: "#000000"  // Black text on light highlight backgrounds
 
     // Bordures
     readonly property color border: "#555555"
