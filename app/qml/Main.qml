@@ -22,18 +22,32 @@ ApplicationWindow {
         graph.createNode("Output", Qt.point(1000, 500))
     }
 
+    // Common menu palette
+    property var menuPalette: ({
+        window: Theme.surface,
+        windowText: Theme.text,
+        base: Theme.surface,
+        text: Theme.text,
+        highlight: Theme.menuHighlight,
+        highlightedText: Theme.text,
+        button: Theme.surface,
+        buttonText: Theme.text,
+        mid: Theme.border
+    })
+
     menuBar: MenuBar {
         palette.window: Theme.backgroundLight
         palette.windowText: Theme.text
+        palette.base: Theme.backgroundLight
+        palette.text: Theme.text
         palette.highlight: Theme.menuHighlight
         palette.highlightedText: Theme.text
+        palette.button: Theme.backgroundLight
+        palette.buttonText: Theme.text
 
         Menu {
             title: qsTr("&Fichier")
-            palette.window: Theme.surface
-            palette.windowText: Theme.text
-            palette.highlight: Theme.menuHighlight
-            palette.highlightedText: Theme.text
+            palette: root.menuPalette
 
             Action {
                 text: qsTr("&Nouveau")
@@ -56,10 +70,7 @@ ApplicationWindow {
 
         Menu {
             title: qsTr("&Edition")
-            palette.window: Theme.surface
-            palette.windowText: Theme.text
-            palette.highlight: Theme.menuHighlight
-            palette.highlightedText: Theme.text
+            palette: root.menuPalette
 
             Action {
                 text: qsTr("&Supprimer")
@@ -78,10 +89,7 @@ ApplicationWindow {
 
         Menu {
             title: qsTr("&Affichage")
-            palette.window: Theme.surface
-            palette.windowText: Theme.text
-            palette.highlight: Theme.menuHighlight
-            palette.highlightedText: Theme.text
+            palette: root.menuPalette
 
             Action {
                 text: qsTr("Afficher la grille")

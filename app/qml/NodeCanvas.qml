@@ -23,6 +23,19 @@ Item {
     // Context menu position
     property point contextMenuPosition: Qt.point(0, 0)
 
+    // Common menu palette
+    property var menuPalette: ({
+        window: Theme.surface,
+        windowText: Theme.text,
+        base: Theme.surface,
+        text: Theme.text,
+        highlight: Theme.menuHighlight,
+        highlightedText: Theme.text,
+        button: Theme.surface,
+        buttonText: Theme.text,
+        mid: Theme.border
+    })
+
     // Find port at position (hit-testing)
     function findPortAtPosition(pos) {
         var hitRadius = Theme.portRadius + 8
@@ -218,17 +231,11 @@ Item {
     // Context menu for creating nodes
     Menu {
         id: contextMenu
-        palette.window: Theme.surface
-        palette.windowText: Theme.text
-        palette.highlight: Theme.menuHighlight
-        palette.highlightedText: Theme.text
+        palette: root.menuPalette
 
         Menu {
             title: qsTr("Shapes")
-            palette.window: Theme.surface
-            palette.windowText: Theme.text
-            palette.highlight: Theme.menuHighlight
-            palette.highlightedText: Theme.text
+            palette: root.menuPalette
 
             Action {
                 text: qsTr("Gizmo")
@@ -248,10 +255,7 @@ Item {
 
         Menu {
             title: qsTr("Tweaks")
-            palette.window: Theme.surface
-            palette.windowText: Theme.text
-            palette.highlight: Theme.menuHighlight
-            palette.highlightedText: Theme.text
+            palette: root.menuPalette
 
             Action {
                 text: qsTr("Position")
@@ -276,10 +280,7 @@ Item {
 
         Menu {
             title: qsTr("Utility")
-            palette.window: Theme.surface
-            palette.windowText: Theme.text
-            palette.highlight: Theme.menuHighlight
-            palette.highlightedText: Theme.text
+            palette: root.menuPalette
 
             Action {
                 text: qsTr("TimeShift")
