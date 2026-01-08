@@ -183,6 +183,20 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         spacing: 4
 
+        Component.onCompleted: {
+            if (nodeData && nodeData.type === "Group") {
+                console.log("=== GROUP DEBUG ===")
+                console.log("category:", nodeData.category)
+                console.log("Node.Category.Shape:", Node.Category.Shape)
+                console.log("category === Shape:", nodeData.category === Node.Category.Shape)
+                console.log("isShapeOrUtility:", isShapeOrUtility)
+                console.log("hasLeftPorts:", hasLeftPorts)
+                console.log("typeof inputCount:", typeof nodeData.inputCount)
+                console.log("inputCount():", typeof nodeData.inputCount === 'function' ? nodeData.inputCount() : "N/A")
+                console.log("===================")
+            }
+        }
+
         Repeater {
             model: (!nodeData || typeof nodeData.inputCount !== 'function') ? 0 : (isShapeOrUtility ? nodeData.inputCount() : (isTweak && getRatioInput() ? 1 : 0))
 
