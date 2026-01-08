@@ -13,8 +13,11 @@ GroupNode::GroupNode(QObject* parent)
 {
     setDisplayName(QStringLiteral("Group"));
 
-    // Initial ratio inputs
-    updateInputPorts();
+    // Initial ratio inputs (2 by default)
+    for (int i = 0; i < _ratioInputCount; ++i)
+    {
+        addInput(QStringLiteral("ratio%1").arg(i + 1), Port::DataType::Ratio2D);
+    }
 
     // Output
     addOutput(QStringLiteral("ratio"), Port::DataType::Ratio2D);

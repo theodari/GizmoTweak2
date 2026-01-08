@@ -28,7 +28,7 @@ QtObject {
     // Nodes par catégorie
     readonly property color nodeIO: "#4060A0"
     readonly property color nodeShape: "#40A060"      // Gizmo, SurfaceFactory
-    readonly property color nodeGroup: "#308050"      // Group (distinct green)
+    readonly property color nodeGroup: "#00BFBF"      // Group (cyan)
     readonly property color nodeUtility: "#606060"
     readonly property color nodeTweak: "#A06040"
 
