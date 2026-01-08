@@ -186,6 +186,8 @@ Rectangle {
         Component.onCompleted: {
             if (nodeData) {
                 console.log("LEFT PORTS - Node:", nodeData.type,
+                    "category:", nodeData.category,
+                    "Node.Shape:", Node.Shape,
                     "isShapeOrUtility:", isShapeOrUtility,
                     "hasLeftPorts:", hasLeftPorts,
                     "inputCount:", typeof nodeData.inputCount === 'function' ? nodeData.inputCount() : "N/A")
