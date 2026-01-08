@@ -59,7 +59,31 @@ bool Port::canConnectTo(Port* other) const
     // Frame -> Frame only
     // Ratio2D -> Ratio2D only
     // Ratio1D -> Ratio1D only
-    return _dataType == other->_dataType;
+    if (_dataType != other->_dataType)
+    {
+        return false;
+    }
+
+    // Connection rules:
+    // - All Input ports (Direction::In) can only have one connection
+    // - Frame Output ports can only have one connection (linear chain)
+    // - Ratio Output ports can have multiple connections (fan-out from Shapes)
+
+    // Check input port
+    const Port* inputPort = (_direction == Direction::In) ? this : other;
+    if (inputPort->isConnected())
+    {
+        return false;
+    }
+
+    // Check output port - Frame outputs are also single-connection
+    const Port* outputPort = (_direction == Direction::Out) ? this : other;
+    if (outputPort->_dataType == DataType::Frame && outputPort->isConnected())
+    {
+        return false;
+    }
+
+    return true;
 }
 
 } // namespace gizmotweak2
