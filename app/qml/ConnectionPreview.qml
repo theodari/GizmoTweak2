@@ -9,9 +9,9 @@ Shape {
     property var startPort: null
     property point endPoint: Qt.point(0, 0)
 
-    // Convert scene coordinates to local coordinates
-    property point startPos: !startPort ? Qt.point(0, 0) : mapFromItem(null, startPort.scenePosition.x, startPort.scenePosition.y)
-    property point localEndPoint: mapFromItem(null, endPoint.x, endPoint.y)
+    // Use coordinates directly (already in Flickable content space)
+    property point startPos: !startPort ? Qt.point(0, 0) : startPort.scenePosition
+    property point localEndPoint: endPoint
 
     ShapePath {
         strokeColor: Theme.cablePreview

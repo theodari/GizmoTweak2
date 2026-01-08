@@ -80,4 +80,22 @@ qreal TimeShiftNode::shiftTime(qreal currentTime) const
     return shifted;
 }
 
+QJsonObject TimeShiftNode::propertiesToJson() const
+{
+    QJsonObject obj;
+    obj["delay"] = _delay;
+    obj["scale"] = _scale;
+    obj["loop"] = _loop;
+    obj["loopDuration"] = _loopDuration;
+    return obj;
+}
+
+void TimeShiftNode::propertiesFromJson(const QJsonObject& json)
+{
+    if (json.contains("delay")) setDelay(json["delay"].toDouble());
+    if (json.contains("scale")) setScale(json["scale"].toDouble());
+    if (json.contains("loop")) setLoop(json["loop"].toBool());
+    if (json.contains("loopDuration")) setLoopDuration(json["loopDuration"].toDouble());
+}
+
 } // namespace gizmotweak2

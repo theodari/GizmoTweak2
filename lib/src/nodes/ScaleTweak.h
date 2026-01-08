@@ -44,6 +44,10 @@ public:
     // Apply tweak to a point
     Q_INVOKABLE QPointF apply(qreal x, qreal y, qreal ratio) const;
 
+    // Serialization
+    QJsonObject propertiesToJson() const override;
+    void propertiesFromJson(const QJsonObject& json) override;
+
 signals:
     void scaleXChanged();
     void scaleYChanged();

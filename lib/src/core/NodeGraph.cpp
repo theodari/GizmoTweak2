@@ -365,6 +365,13 @@ QJsonObject NodeGraph::toJson() const
         posObj["y"] = node->position().y();
         nodeObj["position"] = posObj;
 
+        // Save node-specific properties
+        auto props = node->propertiesToJson();
+        if (!props.isEmpty())
+        {
+            nodeObj["properties"] = props;
+        }
+
         nodesArray.append(nodeObj);
     }
     root["nodes"] = nodesArray;
@@ -393,10 +400,115 @@ QJsonObject NodeGraph::toJson() const
 
 bool NodeGraph::fromJson(const QJsonObject& json)
 {
-    // Note: Node creation from JSON requires a factory
-    // This is a placeholder for the structure
-    Q_UNUSED(json)
-    return false;
+    // Version check for backward compatibility
+    auto version = json["version"].toString();
+    if (version.isEmpty())
+    {
+        qWarning() << "No version in file, cannot load";
+        return false;
+    }
+
+    // Parse version (format: "major.minor.patch")
+    auto versionParts = version.split('.');
+    int majorVersion = versionParts.size() > 0 ? versionParts[0].toInt() : 0;
+    int minorVersion = versionParts.size() > 1 ? versionParts[1].toInt() : 0;
+
+    // Current format version is 0.2.x
+    // We support loading 0.2.x files
+    if (majorVersion != 0 || minorVersion < 2)
+    {
+        qWarning() << "Unsupported file version:" << version;
+        return false;
+    }
+
+    // Clear existing graph
+    clear();
+
+    // Map old UUIDs to new nodes
+    QHash<QString, Node*> uuidMap;
+
+    // Load nodes
+    auto nodesArray = json["nodes"].toArray();
+    for (const auto& nodeVal : nodesArray)
+    {
+        auto nodeObj = nodeVal.toObject();
+        auto type = nodeObj["type"].toString();
+        auto oldUuid = nodeObj["uuid"].toString();
+
+        auto posObj = nodeObj["position"].toObject();
+        QPointF position(posObj["x"].toDouble(), posObj["y"].toDouble());
+
+        auto node = createNode(type, position);
+        if (node)
+        {
+            auto displayName = nodeObj["displayName"].toString();
+            if (!displayName.isEmpty())
+            {
+                node->setDisplayName(displayName);
+            }
+
+            // Load node-specific properties
+            if (nodeObj.contains("properties"))
+            {
+                node->propertiesFromJson(nodeObj["properties"].toObject());
+            }
+
+            uuidMap[oldUuid] = node;
+        }
+    }
+
+    // Load connections
+    auto connectionsArray = json["connections"].toArray();
+    for (const auto& connVal : connectionsArray)
+    {
+        auto connObj = connVal.toObject();
+
+        auto fromObj = connObj["from"].toObject();
+        auto fromNodeUuid = fromObj["node"].toString();
+        auto fromPortName = fromObj["port"].toString();
+
+        auto toObj = connObj["to"].toObject();
+        auto toNodeUuid = toObj["node"].toString();
+        auto toPortName = toObj["port"].toString();
+
+        // Find nodes by old UUID
+        auto fromNode = uuidMap.value(fromNodeUuid);
+        auto toNode = uuidMap.value(toNodeUuid);
+
+        if (!fromNode || !toNode)
+        {
+            continue;
+        }
+
+        // Find ports by name
+        Port* fromPort = nullptr;
+        Port* toPort = nullptr;
+
+        for (auto port : fromNode->outputs())
+        {
+            if (port->name() == fromPortName)
+            {
+                fromPort = port;
+                break;
+            }
+        }
+
+        for (auto port : toNode->inputs())
+        {
+            if (port->name() == toPortName)
+            {
+                toPort = port;
+                break;
+            }
+        }
+
+        if (fromPort && toPort)
+        {
+            connect(fromPort, toPort);
+        }
+    }
+
+    return true;
 }
 
 void NodeGraph::clear()

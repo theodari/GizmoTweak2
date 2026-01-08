@@ -67,4 +67,20 @@ QPointF RotationTweak::apply(qreal x, qreal y, qreal ratio) const
     return QPointF(_centerX + rotatedX, _centerY + rotatedY);
 }
 
+QJsonObject RotationTweak::propertiesToJson() const
+{
+    QJsonObject obj;
+    obj["angle"] = _angle;
+    obj["centerX"] = _centerX;
+    obj["centerY"] = _centerY;
+    return obj;
+}
+
+void RotationTweak::propertiesFromJson(const QJsonObject& json)
+{
+    if (json.contains("angle")) setAngle(json["angle"].toDouble());
+    if (json.contains("centerX")) setCenterX(json["centerX"].toDouble());
+    if (json.contains("centerY")) setCenterY(json["centerY"].toDouble());
+}
+
 } // namespace gizmotweak2

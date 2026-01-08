@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import GizmoTweakLib2
 import GizmoTweak2
 
@@ -10,16 +11,59 @@ ApplicationWindow {
     width: 1280
     height: 720
     visible: true
-    title: "GizmoTweak2"
+    title: currentFile ? "GizmoTweak2 - " + currentFile : "GizmoTweak2"
     color: Theme.background
 
     property NodeGraph graph: NodeGraph {}
     property bool showGrid: false
+    property string currentFile: ""
+    property bool showProperties: true
 
     // Create Input and Output at startup
     Component.onCompleted: {
         graph.createNode("Input", Qt.point(1000, 100))
         graph.createNode("Output", Qt.point(1000, 500))
+    }
+
+    // File operations
+    function newGraph() {
+        graph.clear()
+        graph.createNode("Input", Qt.point(1000, 100))
+        graph.createNode("Output", Qt.point(1000, 500))
+        currentFile = ""
+    }
+
+    function saveGraph(fileUrl) {
+        var json = graph.toJson()
+        var jsonString = JSON.stringify(json, null, 2)
+        FileIO.writeFile(fileUrl, jsonString)
+        currentFile = FileIO.urlToLocalFile(fileUrl)
+    }
+
+    function loadGraph(fileUrl) {
+        var jsonString = FileIO.readFile(fileUrl)
+        if (jsonString) {
+            var json = JSON.parse(jsonString)
+            graph.fromJson(json)
+            currentFile = FileIO.urlToLocalFile(fileUrl)
+        }
+    }
+
+    // File dialogs
+    FileDialog {
+        id: openDialog
+        title: qsTr("Open Graph")
+        nameFilters: [qsTr("GizmoTweak files (*.gt2)"), qsTr("All files (*)")]
+        onAccepted: loadGraph(selectedFile)
+    }
+
+    FileDialog {
+        id: saveDialog
+        title: qsTr("Save Graph")
+        nameFilters: [qsTr("GizmoTweak files (*.gt2)"), qsTr("All files (*)")]
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "gt2"
+        onAccepted: saveGraph(selectedFile)
     }
 
     menuBar: MenuBar {
@@ -47,11 +91,31 @@ ApplicationWindow {
             Action {
                 text: qsTr("&New")
                 shortcut: StandardKey.New
+                onTriggered: newGraph()
+            }
+
+            Action {
+                text: qsTr("&Open...")
+                shortcut: StandardKey.Open
+                onTriggered: openDialog.open()
+            }
+
+            Action {
+                text: qsTr("&Save")
+                shortcut: StandardKey.Save
                 onTriggered: {
-                    graph.clear()
-                    graph.createNode("Input", Qt.point(1000, 100))
-                    graph.createNode("Output", Qt.point(1000, 500))
+                    if (currentFile) {
+                        saveGraph("file:///" + currentFile)
+                    } else {
+                        saveDialog.open()
+                    }
                 }
+            }
+
+            Action {
+                text: qsTr("Save &As...")
+                shortcut: StandardKey.SaveAs
+                onTriggered: saveDialog.open()
             }
 
             MenuSeparator {}
@@ -99,14 +163,54 @@ ApplicationWindow {
                 checked: showGrid
                 onTriggered: showGrid = !showGrid
             }
+
+            Action {
+                text: qsTr("Show Properties")
+                checkable: true
+                checked: showProperties
+                onTriggered: showProperties = !showProperties
+            }
+
+            MenuSeparator {}
+
+            Action {
+                text: qsTr("Zoom In")
+                shortcut: StandardKey.ZoomIn
+                onTriggered: canvas.zoomIn()
+            }
+
+            Action {
+                text: qsTr("Zoom Out")
+                shortcut: StandardKey.ZoomOut
+                onTriggered: canvas.zoomOut()
+            }
+
+            Action {
+                text: qsTr("Reset Zoom")
+                shortcut: "Ctrl+0"
+                onTriggered: canvas.resetZoom()
+            }
         }
     }
 
-    NodeCanvas {
-        id: canvas
+    Row {
         anchors.fill: parent
-        graph: root.graph
-        showGrid: root.showGrid
+
+        NodeCanvas {
+            id: canvas
+            width: parent.width - (propertiesPanel.visible ? propertiesPanel.width : 0)
+            height: parent.height
+            graph: root.graph
+            showGrid: root.showGrid
+        }
+
+        PropertiesPanel {
+            id: propertiesPanel
+            width: 250
+            height: parent.height
+            visible: showProperties && canvas.selectedNode !== null
+            selectedNode: canvas.selectedNode
+        }
     }
 
     // Status bar
@@ -127,6 +231,12 @@ ApplicationWindow {
 
             Label {
                 text: qsTr("Connections: %1").arg(graph.connectionCount)
+                color: Theme.text
+                font.pixelSize: Theme.fontSizeSmall
+            }
+
+            Label {
+                text: qsTr("Zoom: %1%").arg(Math.round(canvas.zoomScale * 100))
                 color: Theme.text
                 font.pixelSize: Theme.fontSizeSmall
             }

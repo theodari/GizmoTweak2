@@ -49,6 +49,10 @@ public:
     // Combine multiple ratios
     Q_INVOKABLE qreal combine(const QList<qreal>& ratios) const;
 
+    // Serialization
+    QJsonObject propertiesToJson() const override;
+    void propertiesFromJson(const QJsonObject& json) override;
+
 signals:
     void compositionModeChanged();
     void ratioInputCountChanged();

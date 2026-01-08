@@ -40,15 +40,28 @@ Item {
         anchors.right: isInput ? undefined : parent.right
         anchors.verticalCenter: parent.verticalCenter
 
-        width: Theme.portRadius * 2
-        height: Theme.portRadius * 2
-        radius: Theme.portRadius
+        // Hover state
+        property bool isHovering: portMouseArea.containsMouse || isDragOver
 
-        color: !port ? Theme.border : (port.dataType === Port.DataType.Frame ? Theme.portFrame : (port.dataType === Port.DataType.Ratio2D ? Theme.portRatio2D : (port.dataType === Port.DataType.Ratio1D ? Theme.portRatio1D : Theme.border)))
+        // Size increases on hover
+        property real baseSize: Theme.portRadius * 2
+        property real hoverSize: Theme.portRadius * 2.4
+        width: isHovering ? hoverSize : baseSize
+        height: isHovering ? hoverSize : baseSize
+        radius: width / 2
 
-        // Highlight on hover OR when drag is over this port
-        border.color: (portMouseArea.containsMouse || isDragOver) ? Theme.text : "transparent"
+        // Base color based on data type
+        property color baseColor: !port ? Theme.border : (port.dataType === Port.DataType.Frame ? Theme.portFrame : (port.dataType === Port.DataType.Ratio2D ? Theme.portRatio2D : (port.dataType === Port.DataType.Ratio1D ? Theme.portRatio1D : Theme.border)))
+
+        // Color lightens on hover
+        color: isHovering ? Qt.lighter(baseColor, 1.3) : baseColor
+
+        // Border on hover
+        border.color: isHovering ? Theme.text : "transparent"
         border.width: 2
+
+        Behavior on width { NumberAnimation { duration: 80 } }
+        Behavior on height { NumberAnimation { duration: 80 } }
 
         // Update scene position for connections
         onXChanged: Qt.callLater(updateScenePosition)
@@ -57,8 +70,10 @@ Item {
 
         function updateScenePosition() {
             if (port && visible) {
-                var globalPos = mapToItem(null, width / 2, height / 2)
-                port.scenePosition = globalPos
+                // Map to Flickable's contentItem for correct coordinates
+                var targetItem = flickableRef ? flickableRef.contentItem : null
+                var pos = mapToItem(targetItem, width / 2, height / 2)
+                port.scenePosition = pos
             }
         }
 
@@ -72,7 +87,18 @@ Item {
             return null
         }
 
+        // Find the Flickable ancestor to use as coordinate reference
+        function findFlickable() {
+            var p = root.parent
+            while (p) {
+                if (p.contentItem !== undefined && p.contentX !== undefined) return p
+                p = p.parent
+            }
+            return null
+        }
+
         property Item nodeItem: findNodeItem()
+        property var flickableRef: findFlickable()
 
         Connections {
             target: portCircle.nodeItem
@@ -93,22 +119,25 @@ Item {
                 mouse.accepted = true
                 if (!port) return
                 isDragging = true
-                var globalPos = mapToItem(null, mouse.x, mouse.y)
-                root.dragStarted(port, globalPos)
+                var targetItem = portCircle.flickableRef ? portCircle.flickableRef.contentItem : null
+                var pos = mapToItem(targetItem, mouse.x, mouse.y)
+                root.dragStarted(port, pos)
             }
 
             onPositionChanged: function(mouse) {
                 if (isDragging) {
-                    var globalPos = mapToItem(null, mouse.x, mouse.y)
-                    root.dragUpdated(globalPos)
+                    var targetItem = portCircle.flickableRef ? portCircle.flickableRef.contentItem : null
+                    var pos = mapToItem(targetItem, mouse.x, mouse.y)
+                    root.dragUpdated(pos)
                 }
             }
 
             onReleased: function(mouse) {
                 if (isDragging) {
                     isDragging = false
-                    var globalPos = mapToItem(null, mouse.x, mouse.y)
-                    root.dragEnded(globalPos)
+                    var targetItem = portCircle.flickableRef ? portCircle.flickableRef.contentItem : null
+                    var pos = mapToItem(targetItem, mouse.x, mouse.y)
+                    root.dragEnded(pos)
                 }
             }
         }

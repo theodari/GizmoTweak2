@@ -24,11 +24,16 @@ Rectangle {
     height: 50
 
     radius: Theme.nodeRadius
-    border.color: nodeData && nodeData.selected ? Theme.accent : Theme.border
-    border.width: nodeData && nodeData.selected ? 2 : 1
 
-    // Node background color based on category and type
-    color: {
+    // Hover state
+    property bool isHovering: false
+
+    // Visual properties based on state
+    border.color: nodeData && nodeData.selected ? Theme.accent : (isHovering ? Qt.lighter(Theme.border, 1.3) : Theme.border)
+    border.width: nodeData && nodeData.selected ? 3 : (isHovering ? 2 : 1)
+
+    // Base color based on category and type
+    property color baseColor: {
         if (!nodeData) return Theme.surface
         if (nodeData.category === Node.Category.IO) return Theme.nodeIO
         if (nodeData.category === Node.Category.Shape) {
@@ -38,6 +43,9 @@ Rectangle {
         if (nodeData.category === Node.Category.Tweak) return Theme.nodeTweak
         return Theme.surface
     }
+
+    // Node background color - lighter when selected or hovered
+    color: nodeData && nodeData.selected ? Qt.lighter(baseColor, 1.2) : (isHovering ? Qt.lighter(baseColor, 1.1) : baseColor)
 
     // Determine layout type based on category
     readonly property bool isIONode: nodeData && (nodeData.category === Node.Category.IO)
@@ -87,6 +95,7 @@ Rectangle {
         anchors.fill: parent
         drag.target: root
         drag.threshold: 0
+        hoverEnabled: true
 
         onPressed: function(mouse) {
             // Clear connection selection when clicking on a node
@@ -95,7 +104,13 @@ Rectangle {
             if (!(mouse.modifiers & Qt.ControlModifier)) {
                 graph.clearSelection()
             }
-            if (nodeData) nodeData.selected = true
+            if (nodeData) {
+                nodeData.selected = true
+                if (canvas) {
+                    canvas.selectedNode = nodeData
+                    canvas.selectionChanged()
+                }
+            }
         }
 
         onPositionChanged: {
@@ -122,6 +137,9 @@ Rectangle {
                 }
             }
         }
+
+        onEntered: root.isHovering = true
+        onExited: root.isHovering = false
     }
 
     // Node title

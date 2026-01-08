@@ -58,6 +58,10 @@ public:
     // Apply tweak to a color
     Q_INVOKABLE QColor apply(const QColor& input, qreal ratio) const;
 
+    // Serialization
+    QJsonObject propertiesToJson() const override;
+    void propertiesFromJson(const QJsonObject& json) override;
+
 signals:
     void modeChanged();
     void colorChanged();

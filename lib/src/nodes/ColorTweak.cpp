@@ -129,4 +129,32 @@ QColor ColorTweak::apply(const QColor& input, qreal ratio) const
     return QColor::fromRgbF(outR, outG, outB, input.alphaF());
 }
 
+QJsonObject ColorTweak::propertiesToJson() const
+{
+    QJsonObject obj;
+    obj["mode"] = static_cast<int>(_mode);
+    obj["color"] = _color.name(QColor::HexArgb);
+    obj["intensity"] = _intensity;
+    obj["affectRed"] = _affectRed;
+    obj["affectGreen"] = _affectGreen;
+    obj["affectBlue"] = _affectBlue;
+    return obj;
+}
+
+void ColorTweak::propertiesFromJson(const QJsonObject& json)
+{
+    if (json.contains("mode"))
+    {
+        setMode(static_cast<Mode>(json["mode"].toInt()));
+    }
+    if (json.contains("color"))
+    {
+        setColor(QColor(json["color"].toString()));
+    }
+    if (json.contains("intensity")) setIntensity(json["intensity"].toDouble());
+    if (json.contains("affectRed")) setAffectRed(json["affectRed"].toBool());
+    if (json.contains("affectGreen")) setAffectGreen(json["affectGreen"].toBool());
+    if (json.contains("affectBlue")) setAffectBlue(json["affectBlue"].toBool());
+}
+
 } // namespace gizmotweak2

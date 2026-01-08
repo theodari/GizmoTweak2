@@ -15,6 +15,23 @@ Item {
     property real canvasHeight: 3000
     property real gridSize: 20
 
+    // Zoom properties
+    property real zoomScale: 1.0
+    property real minZoom: 0.25
+    property real maxZoom: 3.0
+
+    function zoomIn() {
+        zoomScale = Math.min(maxZoom, zoomScale * 1.2)
+    }
+
+    function zoomOut() {
+        zoomScale = Math.max(minZoom, zoomScale / 1.2)
+    }
+
+    function resetZoom() {
+        zoomScale = 1.0
+    }
+
     // Connection preview
     property var dragStartPort: null
     property point dragEndPoint: Qt.point(0, 0)
@@ -25,6 +42,11 @@ Item {
 
     // Selected connection
     property var selectedConnection: null
+
+    // Selected node (for properties panel)
+    property var selectedNode: null
+
+    signal selectionChanged()
 
     // Delete selected connection
     function deleteSelectedConnection() {
@@ -38,6 +60,8 @@ Item {
     function clearAllSelections() {
         graph.clearSelection()
         selectedConnection = null
+        selectedNode = null
+        selectionChanged()
     }
 
     // Find non-overlapping position for a node
@@ -147,16 +171,48 @@ Item {
     Flickable {
         id: flickable
         anchors.fill: parent
-        contentWidth: canvasWidth
-        contentHeight: canvasHeight
+        contentWidth: canvasWidth * zoomScale
+        contentHeight: canvasHeight * zoomScale
         clip: true
 
-        // Grid background
-        Rectangle {
-            id: gridBackground
+        // Zoom with mouse wheel
+        WheelHandler {
+            id: wheelHandler
+            target: null  // Don't move target, handle manually
+            onWheel: function(event) {
+                var oldScale = zoomScale
+                if (event.angleDelta.y > 0) {
+                    zoomScale = Math.min(maxZoom, zoomScale * 1.1)
+                } else {
+                    zoomScale = Math.max(minZoom, zoomScale / 1.1)
+                }
+
+                // Zoom towards mouse position
+                if (oldScale !== zoomScale) {
+                    var mouseX = event.x + flickable.contentX
+                    var mouseY = event.y + flickable.contentY
+                    var factor = zoomScale / oldScale
+
+                    flickable.contentX = mouseX * factor - event.x
+                    flickable.contentY = mouseY * factor - event.y
+                }
+            }
+        }
+
+        // Scaled content container
+        Item {
+            id: scaledContent
             width: canvasWidth
             height: canvasHeight
-            color: Theme.background
+            scale: zoomScale
+            transformOrigin: Item.TopLeft
+
+            // Grid background
+            Rectangle {
+                id: gridBackground
+                width: canvasWidth
+                height: canvasHeight
+                color: Theme.background
 
             // Grid pattern (conditional)
             Canvas {
@@ -218,88 +274,99 @@ Item {
             }
         }
 
-        // Connections layer - use ListModel for proper add/remove handling
-        ListModel {
-            id: connectionsModel
-        }
+            // Connections layer - use ListModel for proper add/remove handling
+            ListModel {
+                id: connectionsModel
+            }
 
-        Repeater {
-            id: connectionsRepeater
-            model: connectionsModel
+            Repeater {
+                id: connectionsRepeater
+                model: connectionsModel
 
-            delegate: ConnectionItem {
-                connection: model.connectionObj
-                selected: root.selectedConnection === model.connectionObj
+                delegate: ConnectionItem {
+                    connection: model.connectionObj
+                    selected: root.selectedConnection === model.connectionObj
 
-                onClicked: {
-                    graph.clearSelection()
-                    root.selectedConnection = model.connectionObj
-                }
-
-                onDeleteRequested: {
-                    graph.disconnect(model.connectionObj)
-                    if (root.selectedConnection === model.connectionObj) {
-                        root.selectedConnection = null
+                    onClicked: {
+                        graph.clearSelection()
+                        root.selectedConnection = model.connectionObj
                     }
-                }
-            }
-        }
 
-        // Sync connections model with C++ graph
-        Connections {
-            target: graph
-            function onConnectionAdded(conn) {
-                connectionsModel.append({ "connectionObj": conn })
-            }
-            function onConnectionRemoved(conn) {
-                for (var i = 0; i < connectionsModel.count; i++) {
-                    if (connectionsModel.get(i).connectionObj === conn) {
-                        connectionsModel.remove(i)
-                        break
-                    }
-                }
-            }
-        }
-
-        // Nodes layer
-        Repeater {
-            id: nodesRepeater
-            model: graph
-
-            delegate: NodeItem {
-                required property var node
-                nodeData: node
-                graph: root.graph
-                canvas: root
-                connectionDragging: root.isDraggingConnection
-                dragPosition: root.dragEndPoint
-
-                onConnectionDragStarted: function(port, mousePos) {
-                    root.dragStartPort = port
-                    root.dragEndPoint = mousePos
-                    root.isDraggingConnection = true
-                }
-
-                onConnectionDragUpdated: function(mousePos) {
-                    root.dragEndPoint = mousePos
-                }
-
-                onConnectionDragEnded: function(mousePos) {
-                    // Find target port at mouse position
-                    var targetPort = findPortAtPosition(mousePos)
-                    if (targetPort && root.dragStartPort) {
-                        var result = graph.connect(root.dragStartPort, targetPort)
-                        if (result) {
-                            console.log("Connection created!")
-                        } else {
-                            console.log("Connection failed - incompatible ports")
+                    onDeleteRequested: {
+                        graph.disconnect(model.connectionObj)
+                        if (root.selectedConnection === model.connectionObj) {
+                            root.selectedConnection = null
                         }
                     }
-                    root.isDraggingConnection = false
-                    root.dragStartPort = null
                 }
             }
-        }
+
+            // Sync connections model with C++ graph
+            Connections {
+                target: graph
+                function onConnectionAdded(conn) {
+                    connectionsModel.append({ "connectionObj": conn })
+                }
+                function onConnectionRemoved(conn) {
+                    for (var i = 0; i < connectionsModel.count; i++) {
+                        if (connectionsModel.get(i).connectionObj === conn) {
+                            connectionsModel.remove(i)
+                            break
+                        }
+                    }
+                }
+            }
+
+            // Nodes layer
+            Repeater {
+                id: nodesRepeater
+                model: graph
+
+                delegate: NodeItem {
+                    required property var node
+                    nodeData: node
+                    graph: root.graph
+                    canvas: root
+                    connectionDragging: root.isDraggingConnection
+                    dragPosition: root.dragEndPoint
+
+                    onConnectionDragStarted: function(port, mousePos) {
+                        root.dragStartPort = port
+                        root.dragEndPoint = mousePos
+                        root.isDraggingConnection = true
+                    }
+
+                    onConnectionDragUpdated: function(mousePos) {
+                        root.dragEndPoint = mousePos
+                    }
+
+                    onConnectionDragEnded: function(mousePos) {
+                        // Find target port at mouse position
+                        var targetPort = findPortAtPosition(mousePos)
+                        if (targetPort && root.dragStartPort) {
+                            var result = graph.connect(root.dragStartPort, targetPort)
+                            if (result) {
+                                console.log("Connection created!")
+                            } else {
+                                console.log("Connection failed - incompatible ports")
+                            }
+                        }
+                        root.isDraggingConnection = false
+                        root.dragStartPort = null
+                    }
+                }
+            }
+
+            // Connection preview while dragging
+            ConnectionPreview {
+                id: connectionPreview
+                visible: isDraggingConnection
+                startPort: dragStartPort
+                endPoint: dragEndPoint
+                width: canvasWidth
+                height: canvasHeight
+            }
+        }  // Close scaledContent
     }
 
     // Context menu for creating nodes
@@ -409,18 +476,6 @@ Item {
         for (var i = 0; i < conns.length; i++) {
             connectionsModel.append({ "connectionObj": conns[i] })
         }
-    }
-
-    // Connection preview while dragging (outside Flickable to use scene coordinates)
-    ConnectionPreview {
-        id: connectionPreview
-        visible: isDraggingConnection
-        startPort: dragStartPort
-        endPoint: dragEndPoint
-        x: 0
-        y: 0
-        width: parent.width
-        height: parent.height
     }
 
     // Delete selected items function

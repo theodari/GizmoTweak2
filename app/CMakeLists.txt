@@ -5,6 +5,8 @@ qt_policy(SET QTP0001 NEW)
 
 qt_add_executable(GizmoTweak2 WIN32
     src/main.cpp
+    src/FileIO.h
+    src/FileIO.cpp
 )
 
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
@@ -21,6 +23,10 @@ qt_add_qml_module(GizmoTweak2
         qml/PortItem.qml
         qml/ConnectionItem.qml
         qml/ConnectionPreview.qml
+        qml/PropertiesPanel.qml
+    SOURCES
+        src/FileIO.h
+        src/FileIO.cpp
 )
 
 target_link_libraries(GizmoTweak2
@@ -31,4 +37,5 @@ target_link_libraries(GizmoTweak2
         Qt6::Gui
         Qt6::Quick
         Qt6::QuickControls2
+        Qt6::QuickDialogs2
 )

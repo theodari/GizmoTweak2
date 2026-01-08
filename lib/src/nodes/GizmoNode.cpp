@@ -77,4 +77,22 @@ qreal GizmoNode::computeRatio(qreal x, qreal y) const
     return 1.0 - (t * t * (3.0 - 2.0 * t));
 }
 
+QJsonObject GizmoNode::propertiesToJson() const
+{
+    QJsonObject obj;
+    obj["centerX"] = _centerX;
+    obj["centerY"] = _centerY;
+    obj["radius"] = _radius;
+    obj["falloff"] = _falloff;
+    return obj;
+}
+
+void GizmoNode::propertiesFromJson(const QJsonObject& json)
+{
+    if (json.contains("centerX")) setCenterX(json["centerX"].toDouble());
+    if (json.contains("centerY")) setCenterY(json["centerY"].toDouble());
+    if (json.contains("radius")) setRadius(json["radius"].toDouble());
+    if (json.contains("falloff")) setFalloff(json["falloff"].toDouble());
+}
+
 } // namespace gizmotweak2

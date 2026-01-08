@@ -83,4 +83,24 @@ QPointF PositionTweak::apply(qreal x, qreal y, qreal ratio) const
     return QPointF(resultX, resultY);
 }
 
+QJsonObject PositionTweak::propertiesToJson() const
+{
+    QJsonObject obj;
+    obj["offsetX"] = _offsetX;
+    obj["offsetY"] = _offsetY;
+    obj["useInitialPosition"] = _useInitialPosition;
+    obj["initialX"] = _initialX;
+    obj["initialY"] = _initialY;
+    return obj;
+}
+
+void PositionTweak::propertiesFromJson(const QJsonObject& json)
+{
+    if (json.contains("offsetX")) setOffsetX(json["offsetX"].toDouble());
+    if (json.contains("offsetY")) setOffsetY(json["offsetY"].toDouble());
+    if (json.contains("useInitialPosition")) setUseInitialPosition(json["useInitialPosition"].toBool());
+    if (json.contains("initialX")) setInitialX(json["initialX"].toDouble());
+    if (json.contains("initialY")) setInitialY(json["initialY"].toDouble());
+}
+
 } // namespace gizmotweak2

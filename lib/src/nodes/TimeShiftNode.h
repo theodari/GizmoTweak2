@@ -41,6 +41,10 @@ public:
     // Compute shifted time
     Q_INVOKABLE qreal shiftTime(qreal currentTime) const;
 
+    // Serialization
+    QJsonObject propertiesToJson() const override;
+    void propertiesFromJson(const QJsonObject& json) override;
+
 signals:
     void delayChanged();
     void scaleChanged();

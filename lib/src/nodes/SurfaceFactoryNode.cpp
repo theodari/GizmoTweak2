@@ -153,4 +153,29 @@ qreal SurfaceFactoryNode::computeRatio(qreal t) const
     return result;
 }
 
+QJsonObject SurfaceFactoryNode::propertiesToJson() const
+{
+    QJsonObject obj;
+    obj["surfaceType"] = static_cast<int>(_surfaceType);
+    obj["amplitude"] = _amplitude;
+    obj["frequency"] = _frequency;
+    obj["phase"] = _phase;
+    obj["offset"] = _offset;
+    obj["clamp"] = _clamp;
+    return obj;
+}
+
+void SurfaceFactoryNode::propertiesFromJson(const QJsonObject& json)
+{
+    if (json.contains("surfaceType"))
+    {
+        setSurfaceType(static_cast<SurfaceType>(json["surfaceType"].toInt()));
+    }
+    if (json.contains("amplitude")) setAmplitude(json["amplitude"].toDouble());
+    if (json.contains("frequency")) setFrequency(json["frequency"].toDouble());
+    if (json.contains("phase")) setPhase(json["phase"].toDouble());
+    if (json.contains("offset")) setOffset(json["offset"].toDouble());
+    if (json.contains("clamp")) setClamp(json["clamp"].toBool());
+}
+
 } // namespace gizmotweak2

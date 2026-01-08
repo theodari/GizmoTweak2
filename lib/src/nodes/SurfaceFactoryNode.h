@@ -59,6 +59,10 @@ public:
     // Compute ratio at given time t (0.0 to 1.0 normalized)
     Q_INVOKABLE qreal computeRatio(qreal t) const;
 
+    // Serialization
+    QJsonObject propertiesToJson() const override;
+    void propertiesFromJson(const QJsonObject& json) override;
+
 signals:
     void surfaceTypeChanged();
     void amplitudeChanged();

@@ -39,6 +39,10 @@ public:
     // Compute ratio at position
     Q_INVOKABLE qreal computeRatio(qreal x, qreal y) const;
 
+    // Serialization
+    QJsonObject propertiesToJson() const override;
+    void propertiesFromJson(const QJsonObject& json) override;
+
 signals:
     void centerXChanged();
     void centerYChanged();

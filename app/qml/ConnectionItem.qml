@@ -15,35 +15,36 @@ Item {
 
     visible: connection !== null && connection.sourcePort !== null && connection.targetPort !== null
 
-    // Convert scene coordinates to local (Flickable content) coordinates
-    property point startPos: visible ? mapFromItem(null, connection.sourcePort.scenePosition.x, connection.sourcePort.scenePosition.y) : Qt.point(0, 0)
-    property point endPos: visible ? mapFromItem(null, connection.targetPort.scenePosition.x, connection.targetPort.scenePosition.y) : Qt.point(0, 0)
+    // Get scene positions from ports
+    property point sourceScenePos: visible ? connection.sourcePort.scenePosition : Qt.point(0, 0)
+    property point targetScenePos: visible ? connection.targetPort.scenePosition : Qt.point(0, 0)
+
+    // Compute bounding box with padding for bezier curve control points
+    property real padding: 60
+    property real minX: Math.min(sourceScenePos.x, targetScenePos.x) - padding
+    property real minY: Math.min(sourceScenePos.y, targetScenePos.y) - padding
+    property real maxX: Math.max(sourceScenePos.x, targetScenePos.x) + padding
+    property real maxY: Math.max(sourceScenePos.y, targetScenePos.y) + padding
+
+    // Position and size the item to cover the bounding box
+    x: minX
+    y: minY
+    width: maxX - minX
+    height: maxY - minY
+
+    // Local coordinates relative to this item
+    property point startPos: Qt.point(sourceScenePos.x - minX, sourceScenePos.y - minY)
+    property point endPos: Qt.point(targetScenePos.x - minX, targetScenePos.y - minY)
 
     property color cableColor: !visible ? Theme.border : (connection.sourcePort.dataType === Port.DataType.Frame ? Theme.cableFrame : (connection.sourcePort.dataType === Port.DataType.Ratio2D ? Theme.cableRatio2D : (connection.sourcePort.dataType === Port.DataType.Ratio1D ? Theme.cableRatio1D : Theme.border)))
 
-    // Recalculate on port position changes
-    Connections {
-        target: connection && connection.sourcePort ? connection.sourcePort : null
-        function onScenePositionChanged() {
-            if (root.visible) {
-                root.startPos = root.mapFromItem(null, connection.sourcePort.scenePosition.x, connection.sourcePort.scenePosition.y)
-            }
-        }
-    }
-
-    Connections {
-        target: connection && connection.targetPort ? connection.targetPort : null
-        function onScenePositionChanged() {
-            if (root.visible) {
-                root.endPos = root.mapFromItem(null, connection.targetPort.scenePosition.x, connection.targetPort.scenePosition.y)
-            }
-        }
-    }
+    // Visual properties based on state
+    property color displayColor: selected ? Qt.lighter(cableColor, 1.4) : (hitArea.isHovering ? Qt.lighter(cableColor, 1.2) : cableColor)
+    property int displayWidth: selected ? Theme.cableWidth + 3 : (hitArea.isHovering ? Theme.cableWidth + 1 : Theme.cableWidth)
 
     // Check if a point is near the bezier curve
     function isPointNearCurve(px, py, threshold) {
-        // Sample points along the bezier curve and check distance
-        var samples = 20
+        var samples = 25
         var dx = Math.abs(endPos.x - startPos.x)
         var offset = Math.max(50, dx * 0.5)
 
@@ -56,7 +57,6 @@ Item {
             var t = i / samples
             var mt = 1 - t
 
-            // Cubic bezier formula
             var bx = mt*mt*mt*p0x + 3*mt*mt*t*p1x + 3*mt*t*t*p2x + t*t*t*p3x
             var by = mt*mt*mt*p0y + 3*mt*mt*t*p1y + 3*mt*t*t*p2y + t*t*t*p3y
 
@@ -68,7 +68,7 @@ Item {
         return false
     }
 
-    // Invisible hit area covering the bounding box
+    // Hit area covering the item
     MouseArea {
         id: hitArea
         anchors.fill: parent
@@ -78,7 +78,7 @@ Item {
         property bool isHovering: false
 
         onClicked: function(mouse) {
-            if (isPointNearCurve(mouse.x, mouse.y, 10)) {
+            if (isPointNearCurve(mouse.x, mouse.y, 12)) {
                 if (mouse.button === Qt.LeftButton) {
                     root.clicked()
                 } else if (mouse.button === Qt.RightButton) {
@@ -88,7 +88,7 @@ Item {
         }
 
         onPositionChanged: function(mouse) {
-            isHovering = isPointNearCurve(mouse.x, mouse.y, 10)
+            isHovering = isPointNearCurve(mouse.x, mouse.y, 12)
         }
 
         onExited: {
@@ -102,8 +102,8 @@ Item {
         anchors.fill: parent
 
         ShapePath {
-            strokeColor: root.selected ? Theme.accent : (hitArea.isHovering ? Qt.lighter(cableColor, 1.3) : cableColor)
-            strokeWidth: root.selected ? Theme.cableWidth + 2 : (hitArea.isHovering ? Theme.cableWidth + 1 : Theme.cableWidth)
+            strokeColor: displayColor
+            strokeWidth: displayWidth
             fillColor: "transparent"
             capStyle: ShapePath.RoundCap
 

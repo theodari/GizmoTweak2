@@ -122,4 +122,29 @@ qreal GroupNode::combine(const QList<qreal>& ratios) const
     return qBound(0.0, result, 1.0);
 }
 
+QJsonObject GroupNode::propertiesToJson() const
+{
+    QJsonObject obj;
+    obj["compositionMode"] = static_cast<int>(_compositionMode);
+    obj["ratioInputCount"] = _ratioInputCount;
+    obj["invert"] = _invert;
+    return obj;
+}
+
+void GroupNode::propertiesFromJson(const QJsonObject& json)
+{
+    if (json.contains("compositionMode"))
+    {
+        setCompositionMode(static_cast<CompositionMode>(json["compositionMode"].toInt()));
+    }
+    if (json.contains("ratioInputCount"))
+    {
+        setRatioInputCount(json["ratioInputCount"].toInt());
+    }
+    if (json.contains("invert"))
+    {
+        setInvert(json["invert"].toBool());
+    }
+}
+
 } // namespace gizmotweak2

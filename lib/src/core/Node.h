@@ -5,6 +5,7 @@
 #include <QString>
 #include <QUuid>
 #include <QList>
+#include <QJsonObject>
 #include <QQmlListProperty>
 #include <QtQml/qqmlregistration.h>
 
@@ -62,6 +63,10 @@ public:
     Q_INVOKABLE Port* outputAt(int index) const;
     Q_INVOKABLE int inputCount() const { return _inputs.size(); }
     Q_INVOKABLE int outputCount() const { return _outputs.size(); }
+
+    // Serialization - override in derived classes to save/load specific properties
+    virtual QJsonObject propertiesToJson() const { return QJsonObject(); }
+    virtual void propertiesFromJson(const QJsonObject& json) { Q_UNUSED(json) }
 
 signals:
     void displayNameChanged();

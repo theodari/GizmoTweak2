@@ -98,4 +98,24 @@ QPointF ScaleTweak::apply(qreal x, qreal y, qreal ratio) const
     return QPointF(resultX, resultY);
 }
 
+QJsonObject ScaleTweak::propertiesToJson() const
+{
+    QJsonObject obj;
+    obj["scaleX"] = _scaleX;
+    obj["scaleY"] = _scaleY;
+    obj["uniform"] = _uniform;
+    obj["centerX"] = _centerX;
+    obj["centerY"] = _centerY;
+    return obj;
+}
+
+void ScaleTweak::propertiesFromJson(const QJsonObject& json)
+{
+    if (json.contains("scaleX")) setScaleX(json["scaleX"].toDouble());
+    if (json.contains("scaleY")) setScaleY(json["scaleY"].toDouble());
+    if (json.contains("uniform")) setUniform(json["uniform"].toBool());
+    if (json.contains("centerX")) setCenterX(json["centerX"].toDouble());
+    if (json.contains("centerY")) setCenterY(json["centerY"].toDouble());
+}
+
 } // namespace gizmotweak2

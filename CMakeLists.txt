@@ -13,7 +13,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # Qt 6 obligatoire
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Test)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick QuickControls2 QuickDialogs2 Test)
 
 # Options de build
 option(BUILD_TESTS "Build tests" ON)
