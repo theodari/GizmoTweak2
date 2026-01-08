@@ -1,5 +1,8 @@
 project(GizmoTweakLib2)
 
+# Set Qt policy to suppress QTP0001 warning about QML resource prefix
+qt_policy(SET QTP0001 NEW)
+
 set(LIB_SOURCES
     src/gizmotweaklib2.cpp
     src/core/Port.cpp

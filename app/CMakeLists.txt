@@ -1,5 +1,8 @@
 project(GizmoTweak2App)
 
+# Set Qt policy to suppress QTP0001 warning about QML resource prefix
+qt_policy(SET QTP0001 NEW)
+
 qt_add_executable(GizmoTweak2 WIN32
     src/main.cpp
 )
