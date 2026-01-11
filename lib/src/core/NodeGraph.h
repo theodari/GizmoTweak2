@@ -7,12 +7,15 @@
 #include <QUndoStack>
 #include <QtQml/qqmlregistration.h>
 
+#include <frame.h>
+
 namespace gizmotweak2
 {
 
 class Node;
 class Port;
 class Connection;
+class GraphEvaluator;
 
 class NodeGraph : public QAbstractListModel
 {
@@ -26,6 +29,9 @@ class NodeGraph : public QAbstractListModel
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY canRedoChanged)
     Q_PROPERTY(QString undoText READ undoText NOTIFY undoTextChanged)
     Q_PROPERTY(QString redoText READ redoText NOTIFY redoTextChanged)
+    Q_PROPERTY(bool canPaste READ canPaste NOTIFY canPasteChanged)
+    Q_PROPERTY(bool hasSelection READ hasSelection NOTIFY hasSelectionChanged)
+    Q_PROPERTY(bool isGraphComplete READ isGraphComplete NOTIFY graphValidityChanged)
 
 public:
     enum Roles
@@ -40,7 +46,7 @@ public:
     };
 
     explicit NodeGraph(QObject* parent = nullptr);
-    ~NodeGraph() override = default;
+    ~NodeGraph() override;
 
     // QAbstractListModel interface
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -59,6 +65,10 @@ public:
     QString undoText() const { return _undoStack.undoText(); }
     QString redoText() const { return _undoStack.redoText(); }
 
+    // Clipboard properties
+    bool canPaste() const { return !_clipboard.isEmpty(); }
+    bool hasSelection() const;
+
     // Node factory
     Q_INVOKABLE Node* createNode(const QString& type, QPointF position);
     Q_INVOKABLE QStringList availableNodeTypes() const;
@@ -67,8 +77,20 @@ public:
     Q_INVOKABLE void addNode(Node* node);
     Q_INVOKABLE void removeNode(const QString& uuid);
     Q_INVOKABLE Node* nodeByUuid(const QString& uuid) const;
+    Q_INVOKABLE Node* nodeAt(int index) const;
     Q_INVOKABLE QList<Node*> selectedNodes() const;
     Q_INVOKABLE void clearSelection();
+    Q_INVOKABLE void selectAll();
+    Q_INVOKABLE void duplicateSelected();
+
+    // Graph evaluation - returns transformed Frame
+    Q_INVOKABLE xengine::Frame* evaluate(xengine::Frame* input, qreal time = 0.0);
+
+    // Graph evaluation - returns transformed points array [{x,y,r,g,b}, ...]
+    Q_INVOKABLE QVariantList evaluatePoints(const QVariantList& sourcePoints, qreal time = 0.0);
+
+    // Graph validation
+    bool isGraphComplete() const;
 
     // Connection management
     Q_INVOKABLE Connection* connect(Port* source, Port* target);
@@ -90,6 +112,11 @@ public:
     Q_INVOKABLE void beginMoveNode(const QString& uuid);
     Q_INVOKABLE void endMoveNode(const QString& uuid, QPointF newPos);
 
+    // Clipboard operations
+    Q_INVOKABLE void copySelected();
+    Q_INVOKABLE void pasteAtPosition(QPointF position);
+    Q_INVOKABLE void cutSelected();
+
     // Internal methods (used by undo commands)
     Node* createNodeInternal(const QString& type, QPointF position);
     void removeNodeInternal(const QString& uuid);
@@ -106,9 +133,13 @@ signals:
     void connectionAdded(Connection* connection);
     void connectionRemoved(Connection* connection);
     void canUndoChanged();
+    void nodePropertyChanged();  // Emitted when any node's property changes
     void canRedoChanged();
     void undoTextChanged();
     void redoTextChanged();
+    void canPasteChanged();
+    void hasSelectionChanged();
+    void graphValidityChanged();
 
 private:
     void connectUndoSignals();
@@ -120,6 +151,12 @@ private:
     // Move tracking
     QString _movingNodeUuid;
     QPointF _moveStartPos;
+
+    // Clipboard
+    QJsonObject _clipboard;
+
+    // Evaluator
+    GraphEvaluator* _evaluator{nullptr};
 };
 
 } // namespace gizmotweak2

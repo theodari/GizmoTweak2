@@ -10,6 +10,7 @@
 #include <QtQml/qqmlregistration.h>
 
 #include "Port.h"
+#include "automation/AutomationTrack.h"
 
 namespace gizmotweak2
 {
@@ -38,6 +39,8 @@ public:
     Q_PROPERTY(bool selected READ isSelected WRITE setSelected NOTIFY selectedChanged)
     Q_PROPERTY(QQmlListProperty<gizmotweak2::Port> inputs READ inputsProperty CONSTANT)
     Q_PROPERTY(QQmlListProperty<gizmotweak2::Port> outputs READ outputsProperty CONSTANT)
+    Q_PROPERTY(QList<gizmotweak2::AutomationTrack*> automationTracks READ automationTracks NOTIFY automationTracksChanged)
+    Q_PROPERTY(bool hasAutomation READ hasAutomation NOTIFY automationTracksChanged)
 
 public:
     explicit Node(QObject* parent = nullptr);
@@ -68,13 +71,34 @@ public:
     virtual QJsonObject propertiesToJson() const { return QJsonObject(); }
     virtual void propertiesFromJson(const QJsonObject& json) { Q_UNUSED(json) }
 
+    // Automation serialization
+    QJsonArray automationToJson() const;
+    void automationFromJson(const QJsonArray& json);
+
+    // Automation support
+    QList<AutomationTrack*> automationTracks() const { return _automationTracks; }
+    bool hasAutomation() const;
+    Q_INVOKABLE AutomationTrack* automationTrack(const QString& trackName) const;
+    Q_INVOKABLE AutomationTrack* createAutomationTrack(const QString& trackName, int paramCount, const QColor& color = QColor(80, 80, 80));
+    Q_INVOKABLE void removeAutomationTrack(const QString& trackName);
+
+    // Get automated value at time (returns initial value if not automated)
+    Q_INVOKABLE double automatedValue(const QString& trackName, int paramIndex, int timeMs) const;
+
 signals:
     void displayNameChanged();
     void positionChanged();
     void selectedChanged();
+    void automationTracksChanged();
+    void propertyChanged();  // Emitted when any effect property changes (for preview update)
+    void requestDisconnectPort(gizmotweak2::Port* port);  // Request NodeGraph to disconnect this port
 
 protected:
-    Port* addInput(const QString& name, Port::DataType dataType);
+    // Call this from derived class setters to notify property changes
+    void emitPropertyChanged() { emit propertyChanged(); }
+
+public:
+    Port* addInput(const QString& name, Port::DataType dataType, bool required = false);
     Port* addOutput(const QString& name, Port::DataType dataType);
     void clearInputs();
     void clearOutputs();
@@ -92,6 +116,7 @@ private:
     bool _selected{false};
     QList<Port*> _inputs;
     QList<Port*> _outputs;
+    QList<AutomationTrack*> _automationTracks;
 };
 
 } // namespace gizmotweak2

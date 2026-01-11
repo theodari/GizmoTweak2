@@ -54,7 +54,7 @@ See `doc/ARCHITECTURE.md` for complete details.
 
 **Node categories** (Node::Category):
 - IO: Input, Output
-- Shape: Gizmo, Group, SurfaceFactory
+- Shape: Gizmo, Transform, SurfaceFactory
 - Utility: TimeShift
 - Tweak: Position, Scale, Rotation, etc.
 

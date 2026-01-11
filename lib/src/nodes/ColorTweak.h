@@ -29,6 +29,15 @@ public:
     Q_PROPERTY(bool affectGreen READ affectGreen WRITE setAffectGreen NOTIFY affectGreenChanged)
     Q_PROPERTY(bool affectBlue READ affectBlue WRITE setAffectBlue NOTIFY affectBlueChanged)
 
+    // Filter properties - only apply effect to samples within these color ranges
+    Q_PROPERTY(qreal filterRedMin READ filterRedMin WRITE setFilterRedMin NOTIFY filterRedMinChanged)
+    Q_PROPERTY(qreal filterRedMax READ filterRedMax WRITE setFilterRedMax NOTIFY filterRedMaxChanged)
+    Q_PROPERTY(qreal filterGreenMin READ filterGreenMin WRITE setFilterGreenMin NOTIFY filterGreenMinChanged)
+    Q_PROPERTY(qreal filterGreenMax READ filterGreenMax WRITE setFilterGreenMax NOTIFY filterGreenMaxChanged)
+    Q_PROPERTY(qreal filterBlueMin READ filterBlueMin WRITE setFilterBlueMin NOTIFY filterBlueMinChanged)
+    Q_PROPERTY(qreal filterBlueMax READ filterBlueMax WRITE setFilterBlueMax NOTIFY filterBlueMaxChanged)
+    Q_PROPERTY(bool followGizmo READ followGizmo WRITE setFollowGizmo NOTIFY followGizmoChanged)
+
 public:
     explicit ColorTweak(QObject* parent = nullptr);
     ~ColorTweak() override = default;
@@ -55,6 +64,31 @@ public:
     bool affectBlue() const { return _affectBlue; }
     void setAffectBlue(bool affect);
 
+    // Filter getters/setters
+    qreal filterRedMin() const { return _filterRedMin; }
+    void setFilterRedMin(qreal value);
+
+    qreal filterRedMax() const { return _filterRedMax; }
+    void setFilterRedMax(qreal value);
+
+    qreal filterGreenMin() const { return _filterGreenMin; }
+    void setFilterGreenMin(qreal value);
+
+    qreal filterGreenMax() const { return _filterGreenMax; }
+    void setFilterGreenMax(qreal value);
+
+    qreal filterBlueMin() const { return _filterBlueMin; }
+    void setFilterBlueMin(qreal value);
+
+    qreal filterBlueMax() const { return _filterBlueMax; }
+    void setFilterBlueMax(qreal value);
+
+    bool followGizmo() const { return _followGizmo; }
+    void setFollowGizmo(bool follow);
+
+    // Check if a color passes the filter
+    Q_INVOKABLE bool passesFilter(qreal r, qreal g, qreal b) const;
+
     // Apply tweak to a color
     Q_INVOKABLE QColor apply(const QColor& input, qreal ratio) const;
 
@@ -69,6 +103,13 @@ signals:
     void affectRedChanged();
     void affectGreenChanged();
     void affectBlueChanged();
+    void filterRedMinChanged();
+    void filterRedMaxChanged();
+    void filterGreenMinChanged();
+    void filterGreenMaxChanged();
+    void filterBlueMinChanged();
+    void filterBlueMaxChanged();
+    void followGizmoChanged();
 
 private:
     Mode _mode{Mode::Tint};
@@ -77,6 +118,15 @@ private:
     bool _affectRed{true};
     bool _affectGreen{true};
     bool _affectBlue{true};
+
+    // Filter ranges (0.0 to 1.0)
+    qreal _filterRedMin{0.0};
+    qreal _filterRedMax{1.0};
+    qreal _filterGreenMin{0.0};
+    qreal _filterGreenMax{1.0};
+    qreal _filterBlueMin{0.0};
+    qreal _filterBlueMax{1.0};
+    bool _followGizmo{true};
 };
 
 } // namespace gizmotweak2

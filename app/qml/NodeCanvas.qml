@@ -10,15 +10,27 @@ Item {
     required property NodeGraph graph
     property bool showGrid: false
 
-    // Canvas properties
-    property real canvasWidth: 4000
-    property real canvasHeight: 3000
+    // Animation time for previews (0.0 to 1.0)
+    property real currentTime: 0.0
+
+    // Expose flickable for external coordinate calculations
+    property alias flickable: flickable
+
+    // Canvas properties - 2x the typical visible area
+    property real canvasWidth: 2400
+    property real canvasHeight: 1600
     property real gridSize: 20
 
     // Zoom properties
     property real zoomScale: 1.0
-    property real minZoom: 0.25
-    property real maxZoom: 3.0
+    property real minZoom: 0.5  // Allows seeing entire canvas
+    property real maxZoom: 2.0  // 2x default zoom maximum
+
+    // Zoom area selection mode
+    property bool zoomAreaMode: false
+    property point zoomAreaStart: Qt.point(0, 0)
+    property point zoomAreaEnd: Qt.point(0, 0)
+    property bool isSelectingZoomArea: false
 
     function zoomIn() {
         zoomScale = Math.min(maxZoom, zoomScale * 1.2)
@@ -32,6 +44,108 @@ Item {
         zoomScale = 1.0
     }
 
+    function centerView() {
+        // Center on all nodes without changing zoom
+        if (graph.nodeCount === 0) return
+
+        var minX = Infinity, minY = Infinity
+        var maxX = -Infinity, maxY = -Infinity
+
+        for (var i = 0; i < nodesRepeater.count; i++) {
+            var nodeItem = nodesRepeater.itemAt(i)
+            if (!nodeItem) continue
+
+            minX = Math.min(minX, nodeItem.x)
+            minY = Math.min(minY, nodeItem.y)
+            maxX = Math.max(maxX, nodeItem.x + nodeItem.width)
+            maxY = Math.max(maxY, nodeItem.y + nodeItem.height)
+        }
+
+        if (minX === Infinity) return
+
+        // Calculate center of nodes
+        var centerX = (minX + maxX) / 2
+        var centerY = (minY + maxY) / 2
+
+        // Center the view on nodes
+        flickable.contentX = centerX * zoomScale - flickable.width / 2
+        flickable.contentY = centerY * zoomScale - flickable.height / 2
+    }
+
+    function zoomToFit() {
+        // Find bounding box of all nodes
+        if (graph.nodeCount === 0) return
+
+        var minX = Infinity, minY = Infinity
+        var maxX = -Infinity, maxY = -Infinity
+
+        for (var i = 0; i < nodesRepeater.count; i++) {
+            var nodeItem = nodesRepeater.itemAt(i)
+            if (!nodeItem) continue
+
+            minX = Math.min(minX, nodeItem.x)
+            minY = Math.min(minY, nodeItem.y)
+            maxX = Math.max(maxX, nodeItem.x + nodeItem.width)
+            maxY = Math.max(maxY, nodeItem.y + nodeItem.height)
+        }
+
+        if (minX === Infinity) return
+
+        // Add padding
+        var padding = 50
+        minX -= padding
+        minY -= padding
+        maxX += padding
+        maxY += padding
+
+        var contentW = maxX - minX
+        var contentH = maxY - minY
+
+        // Calculate zoom to fit
+        var scaleX = flickable.width / contentW
+        var scaleY = flickable.height / contentH
+        zoomScale = Math.min(Math.min(scaleX, scaleY), maxZoom)
+        zoomScale = Math.max(zoomScale, minZoom)
+
+        // Center content
+        flickable.contentX = minX * zoomScale - (flickable.width - contentW * zoomScale) / 2
+        flickable.contentY = minY * zoomScale - (flickable.height - contentH * zoomScale) / 2
+    }
+
+    function zoomToArea(x1, y1, x2, y2) {
+        // Normalize coordinates
+        var minX = Math.min(x1, x2)
+        var minY = Math.min(y1, y2)
+        var maxX = Math.max(x1, x2)
+        var maxY = Math.max(y1, y2)
+
+        var areaW = maxX - minX
+        var areaH = maxY - minY
+
+        if (areaW < 10 || areaH < 10) return  // Too small
+
+        // Calculate zoom to fit area
+        var scaleX = flickable.width / areaW
+        var scaleY = flickable.height / areaH
+        zoomScale = Math.min(Math.min(scaleX, scaleY), maxZoom)
+        zoomScale = Math.max(zoomScale, minZoom)
+
+        // Center on area
+        var centerX = (minX + maxX) / 2
+        var centerY = (minY + maxY) / 2
+        flickable.contentX = centerX * zoomScale - flickable.width / 2
+        flickable.contentY = centerY * zoomScale - flickable.height / 2
+    }
+
+    function startZoomAreaSelection() {
+        zoomAreaMode = true
+    }
+
+    function cancelZoomAreaSelection() {
+        zoomAreaMode = false
+        isSelectingZoomArea = false
+    }
+
     // Connection preview
     property var dragStartPort: null
     property point dragEndPoint: Qt.point(0, 0)
@@ -40,6 +154,17 @@ Item {
     // Context menu position
     property point contextMenuPosition: Qt.point(0, 0)
 
+    // Paste position - center of visible area or context menu position
+    property point pastePosition: {
+        if (contextMenuPosition.x > 0 && contextMenuPosition.y > 0) {
+            return contextMenuPosition
+        }
+        // Default: center of visible canvas area
+        var centerX = (flickable.contentX + flickable.width / 2) / zoomScale
+        var centerY = (flickable.contentY + flickable.height / 2) / zoomScale
+        return Qt.point(centerX, centerY)
+    }
+
     // Selected connection
     property var selectedConnection: null
 
@@ -47,6 +172,9 @@ Item {
     property var selectedNode: null
 
     signal selectionChanged()
+    signal nodeClicked(var node)      // Any click on a node
+    signal emptyCanvasClicked()       // Click on empty canvas
+    signal connectionClicked()        // Click on a connection
 
     // Delete selected connection
     function deleteSelectedConnection() {
@@ -174,27 +302,80 @@ Item {
         contentWidth: canvasWidth * zoomScale
         contentHeight: canvasHeight * zoomScale
         clip: true
+        interactive: !zoomAreaMode  // Disable panning when selecting zoom area
 
-        // Zoom with mouse wheel
+        // Drop area for nodes from toolbar
+        DropArea {
+            id: dropArea
+            anchors.fill: parent
+            keys: ["node"]
+
+            onDropped: function(drop) {
+                if (drop.keys.indexOf("node") !== -1) {
+                    // Calculate canvas position from drop position
+                    var canvasX = (drop.x + flickable.contentX) / zoomScale
+                    var canvasY = (drop.y + flickable.contentY) / zoomScale
+
+                    // Snap to grid
+                    canvasX = Math.round(canvasX / gridSize) * gridSize
+                    canvasY = Math.round(canvasY / gridSize) * gridSize
+
+                    // Get node type from drag source
+                    var nodeType = drop.source.nodeType
+                    if (nodeType) {
+                        console.log("Creating node:", nodeType, "at", canvasX, canvasY)
+                        graph.createNode(nodeType, Qt.point(canvasX, canvasY))
+                    }
+                }
+            }
+
+            // Visual feedback during drag over
+            Rectangle {
+                anchors.fill: parent
+                color: dropArea.containsDrag ? Theme.accent : "transparent"
+                opacity: 0.1
+                visible: dropArea.containsDrag
+            }
+        }
+
+        // Mouse wheel handler for zoom and scroll
         WheelHandler {
             id: wheelHandler
             target: null  // Don't move target, handle manually
             onWheel: function(event) {
-                var oldScale = zoomScale
-                if (event.angleDelta.y > 0) {
-                    zoomScale = Math.min(maxZoom, zoomScale * 1.1)
+                var delta = event.angleDelta.y
+                var scrollAmount = 60  // Pixels to scroll per wheel step
+
+                if (event.modifiers & Qt.ControlModifier) {
+                    // Ctrl+wheel = vertical scroll
+                    flickable.contentY = Math.max(0, Math.min(
+                        flickable.contentHeight - flickable.height,
+                        flickable.contentY - delta * scrollAmount / 120
+                    ))
+                } else if (event.modifiers & Qt.ShiftModifier) {
+                    // Shift+wheel = horizontal scroll
+                    flickable.contentX = Math.max(0, Math.min(
+                        flickable.contentWidth - flickable.width,
+                        flickable.contentX - delta * scrollAmount / 120
+                    ))
                 } else {
-                    zoomScale = Math.max(minZoom, zoomScale / 1.1)
-                }
+                    // Plain wheel = zoom towards mouse position
+                    var oldScale = zoomScale
+                    if (delta > 0) {
+                        zoomScale = Math.min(maxZoom, zoomScale * 1.1)
+                    } else {
+                        zoomScale = Math.max(minZoom, zoomScale / 1.1)
+                    }
 
-                // Zoom towards mouse position
-                if (oldScale !== zoomScale) {
-                    var mouseX = event.x + flickable.contentX
-                    var mouseY = event.y + flickable.contentY
-                    var factor = zoomScale / oldScale
+                    // Zoom towards mouse position
+                    if (oldScale !== zoomScale) {
+                        var mouseX = event.x + flickable.contentX
+                        var mouseY = event.y + flickable.contentY
+                        var factor = zoomScale / oldScale
 
-                    flickable.contentX = mouseX * factor - event.x
-                    flickable.contentY = mouseY * factor - event.y
+                        flickable.contentX = mouseX * factor - event.x
+                        flickable.contentY = mouseY * factor - event.y
+                    }
                 }
             }
         }
@@ -202,6 +383,7 @@ Item {
         // Scaled content container
         Item {
             id: scaledContent
+            objectName: "scaledContent"
             width: canvasWidth
             height: canvasHeight
             scale: zoomScale
@@ -253,23 +435,69 @@ Item {
                 }
             }
 
-            // Mouse area for clicks and context menu
+            // Mouse area for clicks, context menu, and zoom area selection
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
+                cursorShape: zoomAreaMode ? Qt.CrossCursor : Qt.ArrowCursor
 
                 onClicked: function(mouse) {
-                    if (mouse.button === Qt.LeftButton) {
+                    if (mouse.button === Qt.LeftButton && !zoomAreaMode) {
                         clearAllSelections()
+                        emptyCanvasClicked()
                     }
                 }
 
                 onPressed: function(mouse) {
                     if (mouse.button === Qt.RightButton) {
+                        // Cancel zoom area mode on right click
+                        if (zoomAreaMode) {
+                            cancelZoomAreaSelection()
+                            return
+                        }
                         // Store position in canvas coordinates
                         contextMenuPosition = Qt.point(mouse.x, mouse.y)
                         contextMenu.popup()
+                    } else if (mouse.button === Qt.LeftButton && zoomAreaMode) {
+                        // Start zoom area selection
+                        zoomAreaStart = Qt.point(mouse.x, mouse.y)
+                        zoomAreaEnd = Qt.point(mouse.x, mouse.y)
+                        isSelectingZoomArea = true
                     }
+                }
+
+                onPositionChanged: function(mouse) {
+                    if (isSelectingZoomArea) {
+                        zoomAreaEnd = Qt.point(mouse.x, mouse.y)
+                    }
+                }
+
+                onReleased: function(mouse) {
+                    if (isSelectingZoomArea && mouse.button === Qt.LeftButton) {
+                        // Perform zoom to area
+                        zoomToArea(zoomAreaStart.x, zoomAreaStart.y, zoomAreaEnd.x, zoomAreaEnd.y)
+                        zoomAreaMode = false
+                        isSelectingZoomArea = false
+                    }
+                }
+            }
+
+            // Zoom area selection rectangle
+            Rectangle {
+                visible: isSelectingZoomArea
+                x: Math.min(zoomAreaStart.x, zoomAreaEnd.x)
+                y: Math.min(zoomAreaStart.y, zoomAreaEnd.y)
+                width: Math.abs(zoomAreaEnd.x - zoomAreaStart.x)
+                height: Math.abs(zoomAreaEnd.y - zoomAreaStart.y)
+                color: "transparent"
+                border.color: Theme.accent
+                border.width: 2
+                opacity: 0.8
+
+                Rectangle {
+                    anchors.fill: parent
+                    color: Theme.accent
+                    opacity: 0.1
                 }
             }
         }
@@ -289,7 +517,9 @@ Item {
 
                     onClicked: {
                         graph.clearSelection()
+                        root.selectedNode = null
                         root.selectedConnection = model.connectionObj
+                        root.connectionClicked()
                     }
 
                     onDeleteRequested: {
@@ -327,6 +557,7 @@ Item {
                     nodeData: node
                     graph: root.graph
                     canvas: root
+                    currentTime: root.currentTime
                     connectionDragging: root.isDraggingConnection
                     dragPosition: root.dragEndPoint
 
@@ -344,16 +575,12 @@ Item {
                         // Find target port at mouse position
                         var targetPort = findPortAtPosition(mousePos)
                         if (targetPort && root.dragStartPort) {
-                            var result = graph.connect(root.dragStartPort, targetPort)
-                            if (result) {
-                                console.log("Connection created!")
-                            } else {
-                                console.log("Connection failed - incompatible ports")
-                            }
+                            graph.connect(root.dragStartPort, targetPort)
                         }
                         root.isDraggingConnection = false
                         root.dragStartPort = null
                     }
+
                 }
             }
 
@@ -369,7 +596,7 @@ Item {
         }  // Close scaledContent
     }
 
-    // Context menu for creating nodes
+    // Context menu
     Menu {
         id: contextMenu
         delegate: StyledMenuItem {}
@@ -381,89 +608,11 @@ Item {
             radius: 2
         }
 
-        Menu {
-            title: qsTr("Shapes")
-            delegate: StyledMenuItem {}
-
-            background: Rectangle {
-                implicitWidth: 150
-                color: Theme.surface
-                border.color: Theme.border
-                radius: 2
-            }
-
-            Action {
-                text: qsTr("Gizmo")
-                onTriggered: createNodeAt("Gizmo")
-            }
-
-            Action {
-                text: qsTr("Group")
-                onTriggered: createNodeAt("Group")
-            }
-
-            Action {
-                text: qsTr("SurfaceFactory")
-                onTriggered: createNodeAt("SurfaceFactory")
-            }
+        Action {
+            text: qsTr("Paste")
+            enabled: graph.canPaste
+            onTriggered: graph.pasteAtPosition(contextMenuPosition)
         }
-
-        Menu {
-            title: qsTr("Tweaks")
-            delegate: StyledMenuItem {}
-
-            background: Rectangle {
-                implicitWidth: 150
-                color: Theme.surface
-                border.color: Theme.border
-                radius: 2
-            }
-
-            Action {
-                text: qsTr("Position")
-                onTriggered: createNodeAt("PositionTweak")
-            }
-
-            Action {
-                text: qsTr("Scale")
-                onTriggered: createNodeAt("ScaleTweak")
-            }
-
-            Action {
-                text: qsTr("Rotation")
-                onTriggered: createNodeAt("RotationTweak")
-            }
-
-            Action {
-                text: qsTr("Color")
-                onTriggered: createNodeAt("ColorTweak")
-            }
-        }
-
-        Menu {
-            title: qsTr("Utility")
-            delegate: StyledMenuItem {}
-
-            background: Rectangle {
-                implicitWidth: 150
-                color: Theme.surface
-                border.color: Theme.border
-                radius: 2
-            }
-
-            Action {
-                text: qsTr("TimeShift")
-                onTriggered: createNodeAt("TimeShift")
-            }
-        }
-    }
-
-    function createNodeAt(nodeType) {
-        // Snap to grid
-        var snappedX = Math.round(contextMenuPosition.x / gridSize) * gridSize
-        var snappedY = Math.round(contextMenuPosition.y / gridSize) * gridSize
-
-        graph.createNode(nodeType, Qt.point(snappedX, snappedY))
     }
 
     // Initialize connections model from existing graph connections

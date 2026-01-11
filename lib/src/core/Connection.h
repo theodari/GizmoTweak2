@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QPointer>
 #include <QUuid>
 #include <QtQml/qqmlregistration.h>
 
@@ -24,15 +25,15 @@ public:
     ~Connection() override;
 
     QString uuid() const { return _uuid.toString(QUuid::WithoutBraces); }
-    Port* sourcePort() const { return _sourcePort; }
-    Port* targetPort() const { return _targetPort; }
+    Port* sourcePort() const { return _sourcePort.data(); }
+    Port* targetPort() const { return _targetPort.data(); }
 
     static bool isValid(Port* source, Port* target);
 
 private:
     QUuid _uuid;
-    Port* _sourcePort;
-    Port* _targetPort;
+    QPointer<Port> _sourcePort;
+    QPointer<Port> _targetPort;
 };
 
 } // namespace gizmotweak2

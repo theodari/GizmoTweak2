@@ -31,9 +31,81 @@ void Port::setConnected(bool connected)
 {
     if (_connected != connected)
     {
+        bool wasSatisfied = isSatisfied();
         _connected = connected;
+        if (!connected && _dataType == DataType::RatioAny)
+        {
+            // Reset to RatioAny when disconnected
+            setConnectedDataType(DataType::RatioAny);
+        }
         emit connectedChanged();
+        if (wasSatisfied != isSatisfied())
+        {
+            emit satisfiedChanged();
+        }
     }
+}
+
+void Port::setRequired(bool required)
+{
+    if (_required != required)
+    {
+        bool wasSatisfied = isSatisfied();
+        _required = required;
+        if (wasSatisfied != isSatisfied())
+        {
+            emit satisfiedChanged();
+        }
+    }
+}
+
+void Port::setVisible(bool visible)
+{
+    if (_visible != visible)
+    {
+        _visible = visible;
+        emit visibleChanged();
+    }
+}
+
+Port::DataType Port::effectiveDataType() const
+{
+    if (_dataType == DataType::RatioAny && _connected)
+    {
+        return _connectedDataType;
+    }
+    return _dataType;
+}
+
+void Port::setConnectedDataType(DataType type)
+{
+    if (_connectedDataType != type)
+    {
+        _connectedDataType = type;
+        emit effectiveDataTypeChanged();
+    }
+}
+
+// Helper to check if two data types are compatible
+static bool areTypesCompatible(Port::DataType a, Port::DataType b)
+{
+    if (a == b) return true;
+
+    // RatioAny is compatible with Ratio1D, Ratio2D, and RatioAny
+    if (a == Port::DataType::RatioAny)
+    {
+        return b == Port::DataType::Ratio1D ||
+               b == Port::DataType::Ratio2D ||
+               b == Port::DataType::RatioAny;
+    }
+    if (b == Port::DataType::RatioAny)
+    {
+        return a == Port::DataType::Ratio1D ||
+               a == Port::DataType::Ratio2D ||
+               a == Port::DataType::RatioAny;
+    }
+
+    return false;
 }
 
 bool Port::canConnectTo(Port* other) const
@@ -56,10 +128,7 @@ bool Port::canConnectTo(Port* other) const
     }
 
     // Data types must be compatible
-    // Frame -> Frame only
-    // Ratio2D -> Ratio2D only
-    // Ratio1D -> Ratio1D only
-    if (_dataType != other->_dataType)
+    if (!areTypesCompatible(_dataType, other->_dataType))
     {
         return false;
     }

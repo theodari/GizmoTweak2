@@ -11,11 +11,11 @@ SurfaceFactoryNode::SurfaceFactoryNode(QObject* parent)
 {
     setDisplayName(QStringLiteral("SurfaceFactory"));
 
-    // Input: normalized time (0-1)
-    addInput(QStringLiteral("time"), Port::DataType::Ratio1D);
+    // No input - SurfaceFactory is a generator (like Gizmo)
+    // It produces time-based ratio curves autonomously
 
-    // Output: computed ratio
-    addOutput(QStringLiteral("ratio"), Port::DataType::Ratio1D);
+    // Output: computed ratio (outputs any ratio type)
+    addOutput(QStringLiteral("ratio"), Port::DataType::RatioAny);
 }
 
 void SurfaceFactoryNode::setSurfaceType(SurfaceType type)
@@ -24,6 +24,7 @@ void SurfaceFactoryNode::setSurfaceType(SurfaceType type)
     {
         _surfaceType = type;
         emit surfaceTypeChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -33,6 +34,7 @@ void SurfaceFactoryNode::setAmplitude(qreal amp)
     {
         _amplitude = amp;
         emit amplitudeChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -42,6 +44,7 @@ void SurfaceFactoryNode::setFrequency(qreal freq)
     {
         _frequency = freq;
         emit frequencyChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -51,6 +54,7 @@ void SurfaceFactoryNode::setPhase(qreal ph)
     {
         _phase = ph;
         emit phaseChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -60,6 +64,7 @@ void SurfaceFactoryNode::setOffset(qreal off)
     {
         _offset = off;
         emit offsetChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -69,6 +74,7 @@ void SurfaceFactoryNode::setClamp(bool c)
     {
         _clamp = c;
         emit clampChanged();
+        emitPropertyChanged();
     }
 }
 

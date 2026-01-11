@@ -3,7 +3,7 @@
 
 #include <QtMath>
 #include <algorithm>
-#include <numeric>
+#include <cmath>
 
 namespace gizmotweak2
 {
@@ -11,16 +11,14 @@ namespace gizmotweak2
 GroupNode::GroupNode(QObject* parent)
     : Node(parent)
 {
-    setDisplayName(QStringLiteral("Group"));
+    setDisplayName(QStringLiteral("Transform"));
 
-    // Initial ratio inputs (2 by default)
-    for (int i = 0; i < _ratioInputCount; ++i)
-    {
-        addInput(QStringLiteral("ratio%1").arg(i + 1), Port::DataType::Ratio2D);
-    }
+    // Exactly 2 ratio inputs - accepts any ratio type
+    addInput(QStringLiteral("ratio1"), Port::DataType::RatioAny);
+    addInput(QStringLiteral("ratio2"), Port::DataType::RatioAny);
 
-    // Output
-    addOutput(QStringLiteral("ratio"), Port::DataType::Ratio2D);
+    // Output - outputs any ratio type
+    addOutput(QStringLiteral("ratio"), Port::DataType::RatioAny);
 }
 
 void GroupNode::setCompositionMode(CompositionMode mode)
@@ -29,105 +27,253 @@ void GroupNode::setCompositionMode(CompositionMode mode)
     {
         _compositionMode = mode;
         emit compositionModeChanged();
+        emitPropertyChanged();
     }
 }
 
-void GroupNode::setRatioInputCount(int count)
+void GroupNode::setSingleInputMode(bool enabled)
 {
-    count = qBound(2, count, 8);
-    if (_ratioInputCount != count)
+    if (_singleInputMode != enabled)
     {
-        _ratioInputCount = count;
-        updateInputPorts();
-        emit ratioInputCountChanged();
+        _singleInputMode = enabled;
+
+        auto* input2 = inputAt(1);
+        if (input2)
+        {
+            if (enabled)
+            {
+                // Disconnect input 2 if connected, then hide it
+                if (input2->isConnected())
+                {
+                    requestDisconnectPort(input2);
+                }
+                input2->setVisible(false);
+            }
+            else
+            {
+                // Show input 2 again
+                input2->setVisible(true);
+            }
+        }
+
+        emit singleInputModeChanged();
+        emitPropertyChanged();
     }
 }
 
-void GroupNode::setInvert(bool inv)
+void GroupNode::setPositionX(qreal x)
 {
-    if (_invert != inv)
+    if (!qFuzzyCompare(_positionX, x))
     {
-        _invert = inv;
-        emit invertChanged();
+        _positionX = x;
+        emit positionXChanged();
+        emitPropertyChanged();
     }
 }
 
-void GroupNode::updateInputPorts()
+void GroupNode::setPositionY(qreal y)
 {
-    // Clear existing input ports
-    clearInputs();
-
-    // Create new input ports
-    for (int i = 0; i < _ratioInputCount; ++i)
+    if (!qFuzzyCompare(_positionY, y))
     {
-        addInput(QStringLiteral("ratio%1").arg(i + 1), Port::DataType::Ratio2D);
+        _positionY = y;
+        emit positionYChanged();
+        emitPropertyChanged();
     }
+}
+
+void GroupNode::setScaleX(qreal sx)
+{
+    if (!qFuzzyCompare(_scaleX, sx))
+    {
+        _scaleX = sx;
+        emit scaleXChanged();
+        emitPropertyChanged();
+    }
+}
+
+void GroupNode::setScaleY(qreal sy)
+{
+    if (!qFuzzyCompare(_scaleY, sy))
+    {
+        _scaleY = sy;
+        emit scaleYChanged();
+        emitPropertyChanged();
+    }
+}
+
+void GroupNode::setRotation(qreal r)
+{
+    if (!qFuzzyCompare(_rotation, r))
+    {
+        _rotation = r;
+        emit rotationChanged();
+        emitPropertyChanged();
+    }
+}
+
+void GroupNode::transformCoordinates(qreal x, qreal y, qreal& outX, qreal& outY) const
+{
+    // Apply inverse geometric transformation to get local coordinates
+    // Same as original GizmoTweak Group::getTweakRatio
+
+    if (qFuzzyIsNull(_scaleX) || qFuzzyIsNull(_scaleY))
+    {
+        outX = 0.0;
+        outY = 0.0;
+        return;
+    }
+
+    qreal rotRad = qDegreesToRadians(_rotation);
+    qreal myCos = std::cos(rotRad);
+    qreal mySin = std::sin(rotRad);
+
+    // Translate to local origin
+    qreal x0 = x - _positionX;
+    qreal y0 = y - _positionY;
+
+    // Rotate and scale (inverse transformation)
+    outX = (myCos * x0 - mySin * y0) / _scaleX;
+    outY = (mySin * x0 + myCos * y0) / _scaleY;
 }
 
 qreal GroupNode::combine(const QList<qreal>& ratios) const
 {
-    if (ratios.isEmpty())
-    {
-        return _invert ? 1.0 : 0.0;
-    }
-
+    // Exact formulas from original GizmoTweak Group::getTweakRatio
     qreal result = 0.0;
+    int activeCount = ratios.size();
 
     switch (_compositionMode)
     {
     case CompositionMode::Normal:
-        result = ratios.first();
+        // Original formula: same signs take max/min, opposite signs sum
+        result = 0.0;
+        for (const qreal& tr : ratios)
+        {
+            if ((tr >= 0.0) && (result >= 0.0))
+            {
+                // Both positive: take max
+                result = qMax(result, tr);
+            }
+            else if ((tr < 0.0) && (result < 0.0))
+            {
+                // Both negative: take min (most negative)
+                result = qMin(result, tr);
+            }
+            else
+            {
+                // Opposite signs: sum
+                result = result + tr;
+            }
+        }
+        result = qBound(-1.0, result, 1.0);
         break;
 
     case CompositionMode::Max:
-        result = *std::max_element(ratios.begin(), ratios.end());
+        if (activeCount == 0)
+        {
+            result = 0.0;
+        }
+        else
+        {
+            result = -1.0;
+            for (const qreal& r : ratios)
+            {
+                result = qMax(result, r);
+            }
+        }
         break;
 
     case CompositionMode::Min:
-        result = *std::min_element(ratios.begin(), ratios.end());
+        if (activeCount == 0)
+        {
+            result = 0.0;
+        }
+        else
+        {
+            result = 1.0;
+            for (const qreal& r : ratios)
+            {
+                result = qMin(result, r);
+            }
+        }
         break;
 
     case CompositionMode::Sum:
-        result = std::accumulate(ratios.begin(), ratios.end(), 0.0);
-        result = qMin(result, 1.0);
-        break;
-
-    case CompositionMode::Product:
-        result = std::accumulate(ratios.begin(), ratios.end(), 1.0,
-                                  std::multiplies<qreal>());
-        break;
-
-    case CompositionMode::Average:
-        result = std::accumulate(ratios.begin(), ratios.end(), 0.0) / ratios.size();
+        result = 0.0;
+        for (const qreal& r : ratios)
+        {
+            result += r;
+        }
+        // Note: Original doesn't clamp Sum
         break;
 
     case CompositionMode::AbsDiff:
-        if (ratios.size() >= 2)
+        if (activeCount == 0)
         {
-            result = qAbs(ratios[0] - ratios[1]);
+            result = 0.0;
+        }
+        else if (activeCount >= 2)
+        {
+            result = ratios[0];
+            for (int i = 1; i < ratios.size(); ++i)
+            {
+                result = qAbs(ratios[i] - result);
+            }
         }
         else
         {
             result = ratios.first();
         }
         break;
+
+    case CompositionMode::Diff:
+        if (activeCount == 0)
+        {
+            result = 0.0;
+        }
+        else if (activeCount >= 2)
+        {
+            result = ratios[0];
+            for (int i = 1; i < ratios.size(); ++i)
+            {
+                result = ratios[i] - result;
+            }
+        }
+        else
+        {
+            result = ratios.first();
+        }
+        break;
+
+    case CompositionMode::Product:
+        if (activeCount == 0)
+        {
+            result = 0.0;
+        }
+        else
+        {
+            result = 1.0;
+            for (const qreal& r : ratios)
+            {
+                result *= r;
+            }
+        }
+        break;
     }
 
-    // Apply inversion
-    if (_invert)
-    {
-        result = 1.0 - result;
-    }
-
-    return qBound(0.0, result, 1.0);
+    return result;
 }
 
 QJsonObject GroupNode::propertiesToJson() const
 {
     QJsonObject obj;
     obj["compositionMode"] = static_cast<int>(_compositionMode);
-    obj["ratioInputCount"] = _ratioInputCount;
-    obj["invert"] = _invert;
+    obj["singleInputMode"] = _singleInputMode;
+    obj["positionX"] = _positionX;
+    obj["positionY"] = _positionY;
+    obj["scaleX"] = _scaleX;
+    obj["scaleY"] = _scaleY;
+    obj["rotation"] = _rotation;
     return obj;
 }
 
@@ -137,13 +283,29 @@ void GroupNode::propertiesFromJson(const QJsonObject& json)
     {
         setCompositionMode(static_cast<CompositionMode>(json["compositionMode"].toInt()));
     }
-    if (json.contains("ratioInputCount"))
+    if (json.contains("singleInputMode"))
     {
-        setRatioInputCount(json["ratioInputCount"].toInt());
+        setSingleInputMode(json["singleInputMode"].toBool());
     }
-    if (json.contains("invert"))
+    if (json.contains("positionX"))
     {
-        setInvert(json["invert"].toBool());
+        setPositionX(json["positionX"].toDouble());
+    }
+    if (json.contains("positionY"))
+    {
+        setPositionY(json["positionY"].toDouble());
+    }
+    if (json.contains("scaleX"))
+    {
+        setScaleX(json["scaleX"].toDouble());
+    }
+    if (json.contains("scaleY"))
+    {
+        setScaleY(json["scaleY"].toDouble());
+    }
+    if (json.contains("rotation"))
+    {
+        setRotation(json["rotation"].toDouble());
     }
 }
 

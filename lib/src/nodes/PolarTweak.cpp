@@ -1,0 +1,210 @@
+#include "PolarTweak.h"
+#include "core/Port.h"
+
+#include <QtMath>
+
+namespace gizmotweak2
+{
+
+PolarTweak::PolarTweak(QObject* parent)
+    : Node(parent)
+{
+    setDisplayName(QStringLiteral("Polar"));
+
+    // Inputs
+    addInput(QStringLiteral("frame"), Port::DataType::Frame, true);  // Required
+    addInput(QStringLiteral("ratio"), Port::DataType::RatioAny);  // Accepts Ratio1D or Ratio2D
+
+    // Output
+    addOutput(QStringLiteral("frame"), Port::DataType::Frame);
+}
+
+void PolarTweak::setExpansion(qreal e)
+{
+    if (!qFuzzyCompare(_expansion, e))
+    {
+        _expansion = e;
+        emit expansionChanged();
+        emitPropertyChanged();
+    }
+}
+
+void PolarTweak::setRingRadius(qreal r)
+{
+    r = qMax(0.0, r);
+    if (!qFuzzyCompare(_ringRadius, r))
+    {
+        _ringRadius = r;
+        emit ringRadiusChanged();
+        emitPropertyChanged();
+    }
+}
+
+void PolarTweak::setRingScale(qreal s)
+{
+    if (!qFuzzyCompare(_ringScale, s))
+    {
+        _ringScale = s;
+        emit ringScaleChanged();
+        emitPropertyChanged();
+    }
+}
+
+void PolarTweak::setCenterX(qreal cx)
+{
+    if (!qFuzzyCompare(_centerX, cx))
+    {
+        _centerX = cx;
+        emit centerXChanged();
+        emitPropertyChanged();
+    }
+}
+
+void PolarTweak::setCenterY(qreal cy)
+{
+    if (!qFuzzyCompare(_centerY, cy))
+    {
+        _centerY = cy;
+        emit centerYChanged();
+        emitPropertyChanged();
+    }
+}
+
+void PolarTweak::setCrossOver(bool co)
+{
+    if (_crossOver != co)
+    {
+        _crossOver = co;
+        emit crossOverChanged();
+        emitPropertyChanged();
+    }
+}
+
+void PolarTweak::setTargetted(bool t)
+{
+    if (_targetted != t)
+    {
+        _targetted = t;
+        emit targettedChanged();
+        emitPropertyChanged();
+    }
+}
+
+void PolarTweak::setFollowGizmo(bool follow)
+{
+    if (_followGizmo != follow)
+    {
+        _followGizmo = follow;
+
+        // Show/hide ratio port based on followGizmo
+        auto* ratioPort = inputAt(1);  // ratio port is at index 1
+        if (ratioPort)
+        {
+            ratioPort->setVisible(follow);
+            if (!follow && ratioPort->isConnected())
+            {
+                emit requestDisconnectPort(ratioPort);
+            }
+        }
+
+        emit followGizmoChanged();
+        emitPropertyChanged();
+    }
+}
+
+QPointF PolarTweak::apply(qreal x, qreal y, qreal ratioX, qreal ratioY,
+                          qreal /*gizmoX*/, qreal /*gizmoY*/) const
+{
+    // Determine which ratio to use
+    qreal rX, rY;
+    if (_crossOver)
+    {
+        rX = ratioY;
+        rY = ratioX;
+    }
+    else
+    {
+        rX = ratioX;
+        rY = ratioY;
+    }
+
+    // Combined ratio for effects
+    qreal ratio = (rX + rY) / 2.0;
+
+    // Always use centerX/centerY as transformation center
+    // (followGizmo only controls whether ratio comes from gizmo or is 1.0)
+
+    // Convert to polar coordinates relative to center
+    qreal dx = x - _centerX;
+    qreal dy = y - _centerY;
+    qreal distance = qSqrt(dx * dx + dy * dy);
+    qreal angle = qAtan2(dy, dx);
+
+    if (distance < 0.0001)
+    {
+        // Point is at center, no transformation possible
+        return QPointF(x, y);
+    }
+
+    // Apply expansion effect
+    qreal newDistance = distance;
+    if (!qFuzzyIsNull(_expansion))
+    {
+        qreal expansionAmount = _expansion * ratio;
+        if (_targetted)
+        {
+            // Move towards center
+            newDistance = distance * (1.0 - expansionAmount);
+        }
+        else
+        {
+            // Expand outward
+            newDistance = distance * (1.0 + expansionAmount);
+        }
+    }
+
+    // Apply ring effect - creates wave distortion based on distance
+    if (!qFuzzyIsNull(_ringScale) && _ringRadius > 0.0)
+    {
+        qreal ringPhase = (distance / _ringRadius) * 2.0 * M_PI;
+        qreal ringOffset = qSin(ringPhase) * _ringScale * ratio;
+        newDistance += ringOffset;
+    }
+
+    // Ensure distance doesn't go negative
+    newDistance = qMax(0.0, newDistance);
+
+    // Convert back to Cartesian
+    qreal resultX = _centerX + newDistance * qCos(angle);
+    qreal resultY = _centerY + newDistance * qSin(angle);
+
+    return QPointF(resultX, resultY);
+}
+
+QJsonObject PolarTweak::propertiesToJson() const
+{
+    QJsonObject obj;
+    obj["expansion"] = _expansion;
+    obj["ringRadius"] = _ringRadius;
+    obj["ringScale"] = _ringScale;
+    obj["centerX"] = _centerX;
+    obj["centerY"] = _centerY;
+    obj["crossOver"] = _crossOver;
+    obj["targetted"] = _targetted;
+    obj["followGizmo"] = _followGizmo;
+    return obj;
+}
+
+void PolarTweak::propertiesFromJson(const QJsonObject& json)
+{
+    if (json.contains("expansion")) setExpansion(json["expansion"].toDouble());
+    if (json.contains("ringRadius")) setRingRadius(json["ringRadius"].toDouble());
+    if (json.contains("ringScale")) setRingScale(json["ringScale"].toDouble());
+    if (json.contains("centerX")) setCenterX(json["centerX"].toDouble());
+    if (json.contains("centerY")) setCenterY(json["centerY"].toDouble());
+    if (json.contains("crossOver")) setCrossOver(json["crossOver"].toBool());
+    if (json.contains("targetted")) setTargetted(json["targetted"].toBool());
+    if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
+}
+
+} // namespace gizmotweak2

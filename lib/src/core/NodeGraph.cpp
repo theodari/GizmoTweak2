@@ -3,6 +3,7 @@
 #include "Port.h"
 #include "Connection.h"
 #include "Commands.h"
+#include "GraphEvaluator.h"
 #include "nodes/InputNode.h"
 #include "nodes/OutputNode.h"
 #include "nodes/GizmoNode.h"
@@ -11,10 +12,22 @@
 #include "nodes/ScaleTweak.h"
 #include "nodes/RotationTweak.h"
 #include "nodes/ColorTweak.h"
+#include "nodes/PolarTweak.h"
+#include "nodes/SparkleTweak.h"
+#include "nodes/FuzzynessTweak.h"
+#include "nodes/ColorFuzzynessTweak.h"
+#include "nodes/SplitTweak.h"
+#include "nodes/RounderTweak.h"
+#include "nodes/WaveTweak.h"
+#include "nodes/SqueezeTweak.h"
 #include "nodes/TimeShiftNode.h"
 #include "nodes/SurfaceFactoryNode.h"
+#include "nodes/MirrorNode.h"
 
+#include <QDebug>
 #include <QJsonArray>
+#include <QSet>
+#include <limits>
 
 namespace gizmotweak2
 {
@@ -23,6 +36,18 @@ NodeGraph::NodeGraph(QObject* parent)
     : QAbstractListModel(parent)
 {
     connectUndoSignals();
+}
+
+NodeGraph::~NodeGraph()
+{
+    // Clear connections first to avoid signaling destroyed ports
+    // Delete connections before nodes are destroyed by QObject
+    qDeleteAll(_connections);
+    _connections.clear();
+
+    // Clear nodes explicitly to ensure proper cleanup order
+    qDeleteAll(_nodes);
+    _nodes.clear();
 }
 
 void NodeGraph::connectUndoSignals()
@@ -136,7 +161,7 @@ Node* NodeGraph::createNodeInternal(const QString& type, QPointF position)
     {
         node = new GizmoNode(this);
     }
-    else if (type == QStringLiteral("Group"))
+    else if (type == QStringLiteral("Transform"))
     {
         node = new GroupNode(this);
     }
@@ -156,6 +181,38 @@ Node* NodeGraph::createNodeInternal(const QString& type, QPointF position)
     {
         node = new ColorTweak(this);
     }
+    else if (type == QStringLiteral("PolarTweak"))
+    {
+        node = new PolarTweak(this);
+    }
+    else if (type == QStringLiteral("SparkleTweak"))
+    {
+        node = new SparkleTweak(this);
+    }
+    else if (type == QStringLiteral("FuzzynessTweak"))
+    {
+        node = new FuzzynessTweak(this);
+    }
+    else if (type == QStringLiteral("ColorFuzzynessTweak"))
+    {
+        node = new ColorFuzzynessTweak(this);
+    }
+    else if (type == QStringLiteral("SplitTweak"))
+    {
+        node = new SplitTweak(this);
+    }
+    else if (type == QStringLiteral("RounderTweak"))
+    {
+        node = new RounderTweak(this);
+    }
+    else if (type == QStringLiteral("WaveTweak"))
+    {
+        node = new WaveTweak(this);
+    }
+    else if (type == QStringLiteral("SqueezeTweak"))
+    {
+        node = new SqueezeTweak(this);
+    }
     else if (type == QStringLiteral("TimeShift"))
     {
         node = new TimeShiftNode(this);
@@ -163,6 +220,10 @@ Node* NodeGraph::createNodeInternal(const QString& type, QPointF position)
     else if (type == QStringLiteral("SurfaceFactory"))
     {
         node = new SurfaceFactoryNode(this);
+    }
+    else if (type == QStringLiteral("Mirror"))
+    {
+        node = new MirrorNode(this);
     }
 
     if (node)
@@ -180,13 +241,22 @@ QStringList NodeGraph::availableNodeTypes() const
         QStringLiteral("Input"),
         QStringLiteral("Output"),
         QStringLiteral("Gizmo"),
-        QStringLiteral("Group"),
+        QStringLiteral("Transform"),
         QStringLiteral("PositionTweak"),
         QStringLiteral("ScaleTweak"),
         QStringLiteral("RotationTweak"),
         QStringLiteral("ColorTweak"),
+        QStringLiteral("PolarTweak"),
+        QStringLiteral("SparkleTweak"),
+        QStringLiteral("FuzzynessTweak"),
+        QStringLiteral("ColorFuzzynessTweak"),
+        QStringLiteral("SplitTweak"),
+        QStringLiteral("RounderTweak"),
+        QStringLiteral("WaveTweak"),
+        QStringLiteral("SqueezeTweak"),
         QStringLiteral("TimeShift"),
-        QStringLiteral("SurfaceFactory")
+        QStringLiteral("SurfaceFactory"),
+        QStringLiteral("Mirror")
     };
 }
 
@@ -199,12 +269,22 @@ void NodeGraph::addNode(Node* node)
 
     node->setParent(this);
 
+    // Connect to selection changes to update hasSelection
+    QObject::connect(node, &Node::selectedChanged, this, &NodeGraph::hasSelectionChanged);
+
+    // Connect to property changes for preview updates
+    QObject::connect(node, &Node::propertyChanged, this, &NodeGraph::nodePropertyChanged);
+
+    // Connect to port disconnect requests (e.g., when followGizmo is disabled)
+    QObject::connect(node, &Node::requestDisconnectPort, this, &NodeGraph::disconnectPortInternal);
+
     beginInsertRows(QModelIndex(), _nodes.size(), _nodes.size());
     _nodes.append(node);
     endInsertRows();
 
     emit nodeCountChanged();
     emit nodeAdded(node);
+    emit graphValidityChanged();
 }
 
 void NodeGraph::removeNode(const QString& uuid)
@@ -240,6 +320,7 @@ void NodeGraph::removeNodeInternal(const QString& uuid)
 
             emit nodeCountChanged();
             emit nodeRemoved(uuid);
+            emit graphValidityChanged();
 
             node->deleteLater();
             return;
@@ -281,6 +362,15 @@ Node* NodeGraph::nodeByUuid(const QString& uuid) const
     return nullptr;
 }
 
+Node* NodeGraph::nodeAt(int index) const
+{
+    if (index < 0 || index >= _nodes.size())
+    {
+        return nullptr;
+    }
+    return _nodes.at(index);
+}
+
 QList<Node*> NodeGraph::selectedNodes() const
 {
     QList<Node*> result;
@@ -305,6 +395,79 @@ void NodeGraph::clearSelection()
             emit dataChanged(idx, idx, {SelectedRole});
         }
     }
+}
+
+void NodeGraph::selectAll()
+{
+    for (int i = 0; i < _nodes.size(); ++i)
+    {
+        if (!_nodes.at(i)->isSelected())
+        {
+            _nodes.at(i)->setSelected(true);
+            auto idx = index(i);
+            emit dataChanged(idx, idx, {SelectedRole});
+        }
+    }
+    emit hasSelectionChanged();
+}
+
+void NodeGraph::duplicateSelected()
+{
+    if (!hasSelection()) return;
+
+    // Copy selected nodes
+    copySelected();
+
+    // Calculate center of selection for offset
+    auto selected = selectedNodes();
+    qreal centerX = 0, centerY = 0;
+    for (auto* node : selected)
+    {
+        centerX += node->position().x();
+        centerY += node->position().y();
+    }
+    centerX /= selected.size();
+    centerY /= selected.size();
+
+    // Paste at offset position (40 pixels down and right)
+    QPointF pastePos(centerX + 40, centerY + 40);
+    pasteAtPosition(pastePos);
+}
+
+xengine::Frame* NodeGraph::evaluate(xengine::Frame* input, qreal time)
+{
+    if (!_evaluator)
+    {
+        _evaluator = new GraphEvaluator(this);
+        _evaluator->setGraph(this);
+    }
+    return _evaluator->evaluate(input, time);
+}
+
+QVariantList NodeGraph::evaluatePoints(const QVariantList& sourcePoints, qreal time)
+{
+    if (!_evaluator)
+    {
+        _evaluator = new GraphEvaluator(this);
+        _evaluator->setGraph(this);
+    }
+    return _evaluator->evaluateToPoints(sourcePoints, time);
+}
+
+bool NodeGraph::isGraphComplete() const
+{
+    // Check all ports in all nodes for unsatisfied required ports
+    for (auto node : _nodes)
+    {
+        for (auto port : node->inputs())
+        {
+            if (port->isRequired() && !port->isSatisfied())
+            {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 Connection* NodeGraph::connect(Port* source, Port* target)
@@ -374,6 +537,7 @@ Connection* NodeGraph::connectInternal(Port* source, Port* target)
     emit connectionCountChanged();
     emit connectionsChanged();
     emit connectionAdded(connection);
+    emit graphValidityChanged();
 
     return connection;
 }
@@ -395,11 +559,22 @@ void NodeGraph::disconnectInternal(Connection* connection)
         return;
     }
 
+    // Update port state immediately (before deleteLater)
+    if (connection->sourcePort())
+    {
+        connection->sourcePort()->setConnected(false);
+    }
+    if (connection->targetPort())
+    {
+        connection->targetPort()->setConnected(false);
+    }
+
     _connections.removeOne(connection);
 
     emit connectionCountChanged();
     emit connectionsChanged();
     emit connectionRemoved(connection);
+    emit graphValidityChanged();
 
     connection->deleteLater();
 }
@@ -443,10 +618,13 @@ Connection* NodeGraph::connectionForPort(Port* port) const
     return nullptr;
 }
 
+// Current file format version - increment when format changes
+static constexpr int FILE_FORMAT_VERSION = 1;
+
 QJsonObject NodeGraph::toJson() const
 {
     QJsonObject root;
-    root["version"] = "0.2.0";
+    root["version"] = FILE_FORMAT_VERSION;
 
     QJsonArray nodesArray;
     for (auto node : _nodes)
@@ -466,6 +644,13 @@ QJsonObject NodeGraph::toJson() const
         if (!props.isEmpty())
         {
             nodeObj["properties"] = props;
+        }
+
+        // Save automation tracks
+        auto automation = node->automationToJson();
+        if (!automation.isEmpty())
+        {
+            nodeObj["automation"] = automation;
         }
 
         nodesArray.append(nodeObj);
@@ -497,21 +682,18 @@ QJsonObject NodeGraph::toJson() const
 bool NodeGraph::fromJson(const QJsonObject& json)
 {
     // Version check for backward compatibility
-    auto version = json["version"].toString();
-    if (version.isEmpty())
+    int version = 0;
+    if (json["version"].isDouble())
     {
-        qWarning() << "No version in file, cannot load";
-        return false;
+        version = json["version"].toInt();
+    }
+    else if (json["version"].isString())
+    {
+        // Legacy support for old "0.x.y" format - treat as version 0
+        version = 0;
     }
 
-    // Parse version (format: "major.minor.patch")
-    auto versionParts = version.split('.');
-    int majorVersion = versionParts.size() > 0 ? versionParts[0].toInt() : 0;
-    int minorVersion = versionParts.size() > 1 ? versionParts[1].toInt() : 0;
-
-    // Current format version is 0.2.x
-    // We support loading 0.2.x files
-    if (majorVersion != 0 || minorVersion < 2)
+    if (version < 0 || version > FILE_FORMAT_VERSION)
     {
         qWarning() << "Unsupported file version:" << version;
         return false;
@@ -547,6 +729,12 @@ bool NodeGraph::fromJson(const QJsonObject& json)
             if (nodeObj.contains("properties"))
             {
                 node->propertiesFromJson(nodeObj["properties"].toObject());
+            }
+
+            // Load automation tracks
+            if (nodeObj.contains("automation"))
+            {
+                node->automationFromJson(nodeObj["automation"].toArray());
             }
 
             uuidMap[oldUuid] = node;
@@ -665,6 +853,262 @@ void NodeGraph::endMoveNode(const QString& uuid, QPointF newPos)
             _undoStack.push(new MoveNodeCommand(this, uuid, _moveStartPos, newPos));
         }
         _movingNodeUuid.clear();
+    }
+}
+
+bool NodeGraph::hasSelection() const
+{
+    for (auto node : _nodes)
+    {
+        if (node->isSelected())
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void NodeGraph::copySelected()
+{
+    qDebug() << "copySelected() called";
+    auto selected = selectedNodes();
+    qDebug() << "Selected nodes count:" << selected.size();
+    if (selected.isEmpty())
+    {
+        qDebug() << "No nodes selected, returning";
+        return;
+    }
+
+    // Filter out Input/Output nodes (they can't be copied)
+    QList<Node*> copyable;
+    for (auto node : selected)
+    {
+        qDebug() << "Checking node:" << node->type() << node->displayName();
+        if (node->type() != QStringLiteral("Input") && node->type() != QStringLiteral("Output"))
+        {
+            copyable.append(node);
+        }
+    }
+
+    qDebug() << "Copyable nodes count:" << copyable.size();
+    if (copyable.isEmpty())
+    {
+        qDebug() << "No copyable nodes, returning";
+        return;
+    }
+
+    QJsonObject clipboard;
+    QJsonArray nodesArray;
+    QSet<QString> copiedUuids;
+
+    // Find bounding box center for relative positioning
+    qreal minX = std::numeric_limits<qreal>::max();
+    qreal minY = std::numeric_limits<qreal>::max();
+    qreal maxX = std::numeric_limits<qreal>::lowest();
+    qreal maxY = std::numeric_limits<qreal>::lowest();
+
+    for (auto node : copyable)
+    {
+        minX = qMin(minX, node->position().x());
+        minY = qMin(minY, node->position().y());
+        maxX = qMax(maxX, node->position().x());
+        maxY = qMax(maxY, node->position().y());
+        copiedUuids.insert(node->uuid());
+    }
+
+    qreal centerX = (minX + maxX) / 2.0;
+    qreal centerY = (minY + maxY) / 2.0;
+
+    // Serialize nodes with relative positions
+    for (auto node : copyable)
+    {
+        QJsonObject nodeObj;
+        nodeObj["uuid"] = node->uuid();
+        nodeObj["type"] = node->type();
+        nodeObj["displayName"] = node->displayName();
+
+        QJsonObject posObj;
+        posObj["x"] = node->position().x() - centerX;
+        posObj["y"] = node->position().y() - centerY;
+        nodeObj["position"] = posObj;
+
+        auto props = node->propertiesToJson();
+        if (!props.isEmpty())
+        {
+            nodeObj["properties"] = props;
+        }
+
+        // Save automation tracks
+        auto automation = node->automationToJson();
+        if (!automation.isEmpty())
+        {
+            nodeObj["automation"] = automation;
+        }
+
+        nodesArray.append(nodeObj);
+    }
+
+    clipboard["nodes"] = nodesArray;
+
+    // Copy connections between selected nodes
+    QJsonArray connectionsArray;
+    for (auto conn : _connections)
+    {
+        auto sourceUuid = conn->sourcePort()->node()->uuid();
+        auto targetUuid = conn->targetPort()->node()->uuid();
+
+        // Only copy connections where both ends are in the selection
+        if (copiedUuids.contains(sourceUuid) && copiedUuids.contains(targetUuid))
+        {
+            QJsonObject connObj;
+
+            QJsonObject fromObj;
+            fromObj["node"] = sourceUuid;
+            fromObj["port"] = conn->sourcePort()->name();
+            connObj["from"] = fromObj;
+
+            QJsonObject toObj;
+            toObj["node"] = targetUuid;
+            toObj["port"] = conn->targetPort()->name();
+            connObj["to"] = toObj;
+
+            connectionsArray.append(connObj);
+        }
+    }
+
+    clipboard["connections"] = connectionsArray;
+
+    _clipboard = clipboard;
+    qDebug() << "Clipboard set with" << nodesArray.size() << "nodes and" << connectionsArray.size() << "connections";
+    qDebug() << "canPaste is now:" << canPaste();
+    emit canPasteChanged();
+}
+
+void NodeGraph::pasteAtPosition(QPointF position)
+{
+    if (_clipboard.isEmpty())
+    {
+        return;
+    }
+
+    auto nodesArray = _clipboard["nodes"].toArray();
+    if (nodesArray.isEmpty())
+    {
+        return;
+    }
+
+    // Map old UUIDs to new nodes
+    QHash<QString, Node*> uuidMap;
+
+    // Clear current selection
+    clearSelection();
+
+    // Create nodes
+    for (const auto& nodeVal : nodesArray)
+    {
+        auto nodeObj = nodeVal.toObject();
+        auto type = nodeObj["type"].toString();
+        auto oldUuid = nodeObj["uuid"].toString();
+
+        auto posObj = nodeObj["position"].toObject();
+        QPointF relativePos(posObj["x"].toDouble(), posObj["y"].toDouble());
+        QPointF newPos = position + relativePos;
+
+        // Snap to grid
+        int gridSize = 20;
+        newPos.setX(qRound(newPos.x() / gridSize) * gridSize);
+        newPos.setY(qRound(newPos.y() / gridSize) * gridSize);
+
+        auto node = createNodeInternal(type, newPos);
+        if (node)
+        {
+            auto displayName = nodeObj["displayName"].toString();
+            if (!displayName.isEmpty())
+            {
+                node->setDisplayName(displayName);
+            }
+
+            if (nodeObj.contains("properties"))
+            {
+                node->propertiesFromJson(nodeObj["properties"].toObject());
+            }
+
+            // Load automation tracks
+            if (nodeObj.contains("automation"))
+            {
+                node->automationFromJson(nodeObj["automation"].toArray());
+            }
+
+            // Select the pasted node
+            node->setSelected(true);
+
+            uuidMap[oldUuid] = node;
+        }
+    }
+
+    // Recreate connections between pasted nodes
+    auto connectionsArray = _clipboard["connections"].toArray();
+    for (const auto& connVal : connectionsArray)
+    {
+        auto connObj = connVal.toObject();
+
+        auto fromObj = connObj["from"].toObject();
+        auto fromNodeUuid = fromObj["node"].toString();
+        auto fromPortName = fromObj["port"].toString();
+
+        auto toObj = connObj["to"].toObject();
+        auto toNodeUuid = toObj["node"].toString();
+        auto toPortName = toObj["port"].toString();
+
+        auto fromNode = uuidMap.value(fromNodeUuid);
+        auto toNode = uuidMap.value(toNodeUuid);
+
+        if (!fromNode || !toNode)
+        {
+            continue;
+        }
+
+        Port* fromPort = nullptr;
+        for (auto port : fromNode->outputs())
+        {
+            if (port->name() == fromPortName)
+            {
+                fromPort = port;
+                break;
+            }
+        }
+
+        Port* toPort = nullptr;
+        for (auto port : toNode->inputs())
+        {
+            if (port->name() == toPortName)
+            {
+                toPort = port;
+                break;
+            }
+        }
+
+        if (fromPort && toPort)
+        {
+            connectInternal(fromPort, toPort);
+        }
+    }
+
+    emit hasSelectionChanged();
+}
+
+void NodeGraph::cutSelected()
+{
+    copySelected();
+
+    // Delete selected nodes (except Input/Output)
+    auto selected = selectedNodes();
+    for (auto node : selected)
+    {
+        if (node->type() != QStringLiteral("Input") && node->type() != QStringLiteral("Output"))
+        {
+            removeNode(node->uuid());
+        }
     }
 }
 

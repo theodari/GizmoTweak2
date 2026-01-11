@@ -11,11 +11,11 @@ TimeShiftNode::TimeShiftNode(QObject* parent)
 {
     setDisplayName(QStringLiteral("TimeShift"));
 
-    // Input: time ratio from automation
-    addInput(QStringLiteral("time"), Port::DataType::Ratio1D);
+    // Input: time ratio (accepts any ratio type)
+    addInput(QStringLiteral("time"), Port::DataType::RatioAny);
 
-    // Output: shifted time ratio
-    addOutput(QStringLiteral("shifted"), Port::DataType::Ratio1D);
+    // Output: shifted time ratio (outputs any ratio type)
+    addOutput(QStringLiteral("shifted"), Port::DataType::RatioAny);
 }
 
 void TimeShiftNode::setDelay(qreal d)
@@ -24,6 +24,7 @@ void TimeShiftNode::setDelay(qreal d)
     {
         _delay = d;
         emit delayChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -35,6 +36,7 @@ void TimeShiftNode::setScale(qreal s)
     {
         _scale = s;
         emit scaleChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -44,6 +46,7 @@ void TimeShiftNode::setLoop(bool l)
     {
         _loop = l;
         emit loopChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -55,6 +58,7 @@ void TimeShiftNode::setLoopDuration(qreal duration)
     {
         _loopDuration = duration;
         emit loopDurationChanged();
+        emitPropertyChanged();
     }
 }
 

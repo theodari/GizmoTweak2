@@ -9,7 +9,7 @@ GizmoTweak2 est une refactorisation node-based de GizmoTweak. L'application perm
 - **Architecture node-based** : graphe dirigé de nodes connectés
 - **Flux séquentiel** : les Frames traversent les Tweaks dans l'ordre défini par le câblage
 - **Séparation Shapes/Tweaks** : les Shapes produisent des ratios, les Tweaks appliquent des effets
-- **Fan-out** : une sortie Shape peut alimenter plusieurs Tweaks ou Groups
+- **Fan-out** : une sortie Shape peut alimenter plusieurs Tweaks ou Transforms
 
 ---
 
@@ -27,7 +27,7 @@ GizmoTweak2 est une refactorisation node-based de GizmoTweak. L'application perm
 | Node | Description | Entrées | Sorties |
 |------|-------------|---------|---------|
 | **Gizmo** | Zone d'influence 2D paramétrique | - | Ratio 2D |
-| **Group** | Combine plusieurs Shapes avec modes de composition | Ratio(s) 2D | Ratio 2D |
+| **Transform** | Combine plusieurs Shapes avec modes de composition | Ratio(s) 2D | Ratio 2D |
 | **SurfaceFactory** | Surface paramétrique (remplace GizmoLine) | - | Ratio 1D |
 
 ### Utility
@@ -43,10 +43,12 @@ GizmoTweak2 est une refactorisation node-based de GizmoTweak. L'application perm
 | **PositionTweak** | Offset X/Y, position initiale/finale | Frame + Ratio | Frame |
 | **ScaleTweak** | Échelle horizontale/verticale | Frame + Ratio | Frame |
 | **RotationTweak** | Rotation | Frame + Ratio | Frame |
-| **MoebiusTweak** | Transformation conforme f(z)=(az+b)/(cz+d) | Frame + Ratio | Frame |
 | **RounderTweak** | Distorsion cylindrique | Frame + Ratio | Frame |
 | **PolarTweak** | Transformation coordonnées polaires | Frame + Ratio | Frame |
 | **ColorTweak** | Effets couleur (Filter, Color, Sparkle) | Frame + Ratio | Frame |
+| **WaveTweak** | Ondulations | Frame + Ratio | Frame |
+| **SqueezeTweak** | Compression/extension directionnelle | Frame + Ratio | Frame |
+| **SparkleTweak** | Effet scintillement | Frame + Ratio | Frame |
 
 ---
 
@@ -59,7 +61,7 @@ Collection de samples laser. Chaque sample contient :
 
 ### Ratio 2D
 Valeur [0, 1] calculée à partir d'une position (x, y).
-Produit par : Gizmo, Group
+Produit par : Gizmo, Transform
 
 ### Ratio 1D
 Valeur [0, 1] calculée à partir de t = index/totalSamples.
@@ -74,20 +76,20 @@ Produit par : SurfaceFactory
 ```
 Source              →  Destination         Valide?
 ─────────────────────────────────────────────────────
-Gizmo (Ratio 2D)    →  Group               ✓
+Gizmo (Ratio 2D)    →  Transform           ✓
 Gizmo (Ratio 2D)    →  Tweak               ✓
-Group (Ratio 2D)    →  Group               ✓
-Group (Ratio 2D)    →  Tweak               ✓
+Transform (Ratio 2D)→  Transform           ✓
+Transform (Ratio 2D)→  Tweak               ✓
 SurfaceFactory (1D) →  Tweak               ✓
 TimeShift           →  Tweak               ✓
-TimeShift           →  Group               ✓
+TimeShift           →  Transform           ✓
 
 Tweak (Frame)       →  Tweak               ✓ (chaînage)
 Tweak (Frame)       →  Output              ✓
 Input (Frame)       →  Tweak               ✓
 
 Tweak               →  Gizmo               ✗
-Tweak               →  Group               ✗
+Tweak               →  Transform           ✗
 ```
 
 ### Fan-out (sorties multiples)
@@ -95,11 +97,11 @@ Tweak               →  Group               ✗
 Une Shape peut être connectée à plusieurs destinations :
 
 ```
-         ┌──────────────▶ PositionTweak
-         │
-Group ───┼──────────────▶ ScaleTweak
-         │
-         └──────────────▶ RotationTweak
+             ┌──────────────▶ PositionTweak
+             │
+Transform ───┼──────────────▶ ScaleTweak
+             │
+             └──────────────▶ RotationTweak
 ```
 
 ### Mode de ratio des Tweaks
@@ -109,7 +111,7 @@ Chaque Tweak possède un commutateur pour le mode de ratio :
 ```cpp
 enum class RatioMode
 {
-    Gizmo2D,    // Ratio calculé avec f(x, y) depuis Gizmo/Group
+    Gizmo2D,    // Ratio calculé avec f(x, y) depuis Gizmo/Transform
     Surface1D   // Ratio calculé avec f(t) depuis SurfaceFactory
 };
 ```
@@ -126,18 +128,18 @@ enum class RatioMode
 └───┬───┘
     │ Frame
     ▼
-┌──────────────┐      ┌─────────┐
-│PositionTweak │◀─────│  Group  │◀─── Gizmo
-└──────┬───────┘      └─────────┘◀─── Gizmo
+┌──────────────┐      ┌───────────┐
+│PositionTweak │◀─────│ Transform │◀─── Gizmo
+└──────┬───────┘      └───────────┘◀─── Gizmo
        │ Frame              ▲
        ▼                    │
 ┌──────────────┐      ┌─────┴─────┐
 │  ScaleTweak  │◀─────│ TimeShift │
 └──────┬───────┘      └─────▲─────┘
        │ Frame              │
-       ▼               ┌────┴────┐
-┌──────────────┐       │  Group  │◀─── SurfaceFactory
-│  ColorTweak  │◀──────└─────────┘
+       ▼               ┌────┴──────┐
+┌──────────────┐       │ Transform │◀─── SurfaceFactory
+│  ColorTweak  │◀──────└───────────┘
 └──────┬───────┘
        │ Frame
        ▼
@@ -158,9 +160,9 @@ L'ordre des Tweaks est déterminé par le **câblage Frame → Frame**, pas par 
 
 ---
 
-## Group : modes de composition
+## Transform : modes de composition
 
-Le Group combine plusieurs Shapes selon un mode paramétrable :
+Le Transform combine plusieurs Shapes selon un mode paramétrable :
 
 | Mode | Formule | Description |
 |------|---------|-------------|
@@ -172,9 +174,11 @@ Le Group combine plusieurs Shapes selon un mode paramétrable :
 | AVERAGE | (a + b + ...) / n | Moyenne |
 | ABSDIF | \|a - b\| | Différence absolue |
 
-Le Group peut également appliquer des **distorsions géométriques** sur les coordonnées avant le calcul du ratio.
+Le Transform peut également appliquer des **distorsions géométriques** sur les coordonnées avant le calcul du ratio.
 
-Tous les paramètres du Group supportent l'**automation**.
+Le Transform supporte un mode **entrée unique** qui désactive la combinaison et passe directement le ratio de la première entrée.
+
+Tous les paramètres du Transform supportent l'**automation**.
 
 ---
 
@@ -261,10 +265,15 @@ class TimeShiftNode;
 class PositionTweak;
 class ScaleTweak;
 class RotationTweak;
-class MoebiusTweak;
 class RounderTweak;
 class PolarTweak;
 class ColorTweak;
+class WaveTweak;
+class SqueezeTweak;
+class SparkleTweak;
+class FuzzynessTweak;
+class ColorFuzzynessTweak;
+class SplitTweak;
 ```
 
 ---
@@ -276,6 +285,6 @@ class ColorTweak;
 | 0.1.0 | Infrastructure (lib + app + tests) |
 | 0.2.0 | Classes de base (Node, Connection, NodeGraph) |
 | 0.3.0 | Nodes I/O (Input, Output) |
-| 0.4.0 | Shapes (Gizmo, Group) |
+| 0.4.0 | Shapes (Gizmo, Transform) |
 | 0.5.0 | Tweaks de base |
 | ... | ... |

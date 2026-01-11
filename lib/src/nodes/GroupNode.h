@@ -15,38 +15,62 @@ class GroupNode : public Node
 public:
     enum class CompositionMode
     {
-        Normal,     // First input only
+        Normal,     // Complex combination (original formula)
         Max,        // Maximum of all inputs
         Min,        // Minimum of all inputs
-        Sum,        // Sum (clamped to 1)
-        Product,    // Multiplication
-        Average,    // Average of all inputs
-        AbsDiff     // Absolute difference (2 inputs)
+        Sum,        // Sum (unclamped)
+        AbsDiff,    // Absolute difference
+        Diff,       // Difference (subtraction)
+        Product     // Multiplication
     };
     Q_ENUM(CompositionMode)
 
     Q_PROPERTY(CompositionMode compositionMode READ compositionMode WRITE setCompositionMode NOTIFY compositionModeChanged)
-    Q_PROPERTY(int ratioInputCount READ ratioInputCount WRITE setRatioInputCount NOTIFY ratioInputCountChanged)
-    Q_PROPERTY(bool invert READ invert WRITE setInvert NOTIFY invertChanged)
+    Q_PROPERTY(bool singleInputMode READ singleInputMode WRITE setSingleInputMode NOTIFY singleInputModeChanged)
+
+    // Geometric controls (like GizmoNode)
+    Q_PROPERTY(qreal positionX READ positionX WRITE setPositionX NOTIFY positionXChanged)
+    Q_PROPERTY(qreal positionY READ positionY WRITE setPositionY NOTIFY positionYChanged)
+    Q_PROPERTY(qreal scaleX READ scaleX WRITE setScaleX NOTIFY scaleXChanged)
+    Q_PROPERTY(qreal scaleY READ scaleY WRITE setScaleY NOTIFY scaleYChanged)
+    Q_PROPERTY(qreal rotation READ rotation WRITE setRotation NOTIFY rotationChanged)
 
 public:
     explicit GroupNode(QObject* parent = nullptr);
     ~GroupNode() override = default;
 
-    QString type() const override { return QStringLiteral("Group"); }
+    QString type() const override { return QStringLiteral("Transform"); }
     Category category() const override { return Category::Shape; }
 
-    // Properties
+    // Composition mode
     CompositionMode compositionMode() const { return _compositionMode; }
     void setCompositionMode(CompositionMode mode);
 
-    int ratioInputCount() const { return _ratioInputCount; }
-    void setRatioInputCount(int count);
+    // Single input mode (bypass combination)
+    bool singleInputMode() const { return _singleInputMode; }
+    void setSingleInputMode(bool enabled);
 
-    bool invert() const { return _invert; }
-    void setInvert(bool inv);
+    // Geometric properties
+    qreal positionX() const { return _positionX; }
+    void setPositionX(qreal x);
 
-    // Combine multiple ratios
+    qreal positionY() const { return _positionY; }
+    void setPositionY(qreal y);
+
+    qreal scaleX() const { return _scaleX; }
+    void setScaleX(qreal sx);
+
+    qreal scaleY() const { return _scaleY; }
+    void setScaleY(qreal sy);
+
+    qreal rotation() const { return _rotation; }
+    void setRotation(qreal r);
+
+    // Transform world coordinates to local coordinates
+    void transformCoordinates(qreal x, qreal y, qreal& outX, qreal& outY) const;
+
+    // Combine multiple ratios according to composition mode
+    // This contains the exact formulas from original GizmoTweak
     Q_INVOKABLE qreal combine(const QList<qreal>& ratios) const;
 
     // Serialization
@@ -55,15 +79,23 @@ public:
 
 signals:
     void compositionModeChanged();
-    void ratioInputCountChanged();
-    void invertChanged();
+    void singleInputModeChanged();
+    void positionXChanged();
+    void positionYChanged();
+    void scaleXChanged();
+    void scaleYChanged();
+    void rotationChanged();
 
 private:
-    void updateInputPorts();
+    CompositionMode _compositionMode{CompositionMode::Normal};
+    bool _singleInputMode{false};
 
-    CompositionMode _compositionMode{CompositionMode::Max};
-    int _ratioInputCount{2};
-    bool _invert{false};
+    // Geometric controls
+    qreal _positionX{0.0};
+    qreal _positionY{0.0};
+    qreal _scaleX{1.0};
+    qreal _scaleY{1.0};
+    qreal _rotation{0.0};  // In degrees
 };
 
 } // namespace gizmotweak2

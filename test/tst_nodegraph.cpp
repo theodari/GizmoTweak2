@@ -206,7 +206,7 @@ void TestNodeGraph::testToJson()
 
     auto json = graph.toJson();
 
-    QCOMPARE(json["version"].toString(), QString("0.2.0"));
+    QCOMPARE(json["version"].toInt(), 1);
     QCOMPARE(json["nodes"].toArray().size(), 2);
     QCOMPARE(json["connections"].toArray().size(), 1);
 }

@@ -10,8 +10,8 @@ ScaleTweak::ScaleTweak(QObject* parent)
     setDisplayName(QStringLiteral("Scale"));
 
     // Inputs
-    addInput(QStringLiteral("frame"), Port::DataType::Frame);
-    addInput(QStringLiteral("ratio"), Port::DataType::Ratio2D);
+    addInput(QStringLiteral("frame"), Port::DataType::Frame, true);  // Required
+    addInput(QStringLiteral("ratio"), Port::DataType::RatioAny);  // Accepts Ratio1D or Ratio2D
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
@@ -29,6 +29,7 @@ void ScaleTweak::setScaleX(qreal sx)
             _scaleY = sx;
             emit scaleYChanged();
         }
+        emitPropertyChanged();
     }
 }
 
@@ -44,6 +45,7 @@ void ScaleTweak::setScaleY(qreal sy)
             _scaleX = sy;
             emit scaleXChanged();
         }
+        emitPropertyChanged();
     }
 }
 
@@ -59,6 +61,7 @@ void ScaleTweak::setUniform(bool u)
             _scaleY = _scaleX;
             emit scaleYChanged();
         }
+        emitPropertyChanged();
     }
 }
 
@@ -68,6 +71,7 @@ void ScaleTweak::setCenterX(qreal cx)
     {
         _centerX = cx;
         emit centerXChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -77,16 +81,67 @@ void ScaleTweak::setCenterY(qreal cy)
     {
         _centerY = cy;
         emit centerYChanged();
+        emitPropertyChanged();
     }
 }
 
-QPointF ScaleTweak::apply(qreal x, qreal y, qreal ratio) const
+void ScaleTweak::setCrossOver(bool co)
 {
+    if (_crossOver != co)
+    {
+        _crossOver = co;
+        emit crossOverChanged();
+        emitPropertyChanged();
+    }
+}
+
+void ScaleTweak::setFollowGizmo(bool follow)
+{
+    if (_followGizmo != follow)
+    {
+        _followGizmo = follow;
+
+        // Show/hide ratio port based on followGizmo
+        auto* ratioPort = inputAt(1);  // ratio port is at index 1
+        if (ratioPort)
+        {
+            ratioPort->setVisible(follow);
+            if (!follow && ratioPort->isConnected())
+            {
+                emit requestDisconnectPort(ratioPort);
+            }
+        }
+
+        emit followGizmoChanged();
+        emitPropertyChanged();
+    }
+}
+
+QPointF ScaleTweak::apply(qreal x, qreal y, qreal ratioX, qreal ratioY,
+                          qreal /*gizmoX*/, qreal /*gizmoY*/) const
+{
+    // Determine which ratio to use for each axis
+    qreal rX, rY;
+    if (_crossOver)
+    {
+        // CrossOver: X uses Y's ratio, Y uses X's ratio
+        rX = ratioY;
+        rY = ratioX;
+    }
+    else
+    {
+        rX = ratioX;
+        rY = ratioY;
+    }
+
     // Interpolate scale factor based on ratio
     // ratio = 0 -> no scaling (factor = 1)
     // ratio = 1 -> full scaling (factor = scaleX/Y)
-    qreal effectiveScaleX = 1.0 + (_scaleX - 1.0) * ratio;
-    qreal effectiveScaleY = 1.0 + (_scaleY - 1.0) * ratio;
+    qreal effectiveScaleX = 1.0 + (_scaleX - 1.0) * rX;
+    qreal effectiveScaleY = 1.0 + (_scaleY - 1.0) * rY;
+
+    // Always use centerX/centerY as scale center
+    // (followGizmo only controls whether ratio comes from gizmo or is 1.0)
 
     // Scale around center point
     qreal dx = x - _centerX;
@@ -106,16 +161,21 @@ QJsonObject ScaleTweak::propertiesToJson() const
     obj["uniform"] = _uniform;
     obj["centerX"] = _centerX;
     obj["centerY"] = _centerY;
+    obj["crossOver"] = _crossOver;
+    obj["followGizmo"] = _followGizmo;
     return obj;
 }
 
 void ScaleTweak::propertiesFromJson(const QJsonObject& json)
 {
+    // Load uniform first to prevent scale sync during scaleX/Y loading
+    if (json.contains("uniform")) setUniform(json["uniform"].toBool());
     if (json.contains("scaleX")) setScaleX(json["scaleX"].toDouble());
     if (json.contains("scaleY")) setScaleY(json["scaleY"].toDouble());
-    if (json.contains("uniform")) setUniform(json["uniform"].toBool());
     if (json.contains("centerX")) setCenterX(json["centerX"].toDouble());
     if (json.contains("centerY")) setCenterY(json["centerY"].toDouble());
+    if (json.contains("crossOver")) setCrossOver(json["crossOver"].toBool());
+    if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
 }
 
 } // namespace gizmotweak2

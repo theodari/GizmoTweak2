@@ -1,6 +1,8 @@
 #include "PositionTweak.h"
 #include "core/Port.h"
 
+#include <QtMath>
+
 namespace gizmotweak2
 {
 
@@ -10,8 +12,8 @@ PositionTweak::PositionTweak(QObject* parent)
     setDisplayName(QStringLiteral("Position"));
 
     // Inputs
-    addInput(QStringLiteral("frame"), Port::DataType::Frame);
-    addInput(QStringLiteral("ratio"), Port::DataType::Ratio2D);
+    addInput(QStringLiteral("frame"), Port::DataType::Frame, true);  // Required
+    addInput(QStringLiteral("ratio"), Port::DataType::RatioAny);  // Accepts Ratio1D or Ratio2D
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
@@ -23,6 +25,7 @@ void PositionTweak::setOffsetX(qreal x)
     {
         _offsetX = x;
         emit offsetXChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -32,55 +35,35 @@ void PositionTweak::setOffsetY(qreal y)
     {
         _offsetY = y;
         emit offsetYChanged();
+        emitPropertyChanged();
     }
 }
 
-void PositionTweak::setUseInitialPosition(bool use)
+void PositionTweak::setFollowGizmo(bool follow)
 {
-    if (_useInitialPosition != use)
+    if (_followGizmo != follow)
     {
-        _useInitialPosition = use;
-        emit useInitialPositionChanged();
-    }
-}
+        _followGizmo = follow;
 
-void PositionTweak::setInitialX(qreal x)
-{
-    if (!qFuzzyCompare(_initialX, x))
-    {
-        _initialX = x;
-        emit initialXChanged();
-    }
-}
+        // Show/hide ratio port based on followGizmo
+        auto* ratioPort = inputAt(1);  // ratio port is at index 1
+        if (ratioPort)
+        {
+            ratioPort->setVisible(follow);
+            if (!follow && ratioPort->isConnected())
+            {
+                emit requestDisconnectPort(ratioPort);
+            }
+        }
 
-void PositionTweak::setInitialY(qreal y)
-{
-    if (!qFuzzyCompare(_initialY, y))
-    {
-        _initialY = y;
-        emit initialYChanged();
+        emit followGizmoChanged();
+        emitPropertyChanged();
     }
 }
 
 QPointF PositionTweak::apply(qreal x, qreal y, qreal ratio) const
 {
-    qreal resultX = x;
-    qreal resultY = y;
-
-    if (_useInitialPosition)
-    {
-        // Interpolate from initial position to offset position
-        resultX = x + ratio * (_offsetX - _initialX) + _initialX;
-        resultY = y + ratio * (_offsetY - _initialY) + _initialY;
-    }
-    else
-    {
-        // Simple offset scaled by ratio
-        resultX = x + _offsetX * ratio;
-        resultY = y + _offsetY * ratio;
-    }
-
-    return QPointF(resultX, resultY);
+    return QPointF(x + _offsetX * ratio, y + _offsetY * ratio);
 }
 
 QJsonObject PositionTweak::propertiesToJson() const
@@ -88,9 +71,7 @@ QJsonObject PositionTweak::propertiesToJson() const
     QJsonObject obj;
     obj["offsetX"] = _offsetX;
     obj["offsetY"] = _offsetY;
-    obj["useInitialPosition"] = _useInitialPosition;
-    obj["initialX"] = _initialX;
-    obj["initialY"] = _initialY;
+    obj["followGizmo"] = _followGizmo;
     return obj;
 }
 
@@ -98,9 +79,7 @@ void PositionTweak::propertiesFromJson(const QJsonObject& json)
 {
     if (json.contains("offsetX")) setOffsetX(json["offsetX"].toDouble());
     if (json.contains("offsetY")) setOffsetY(json["offsetY"].toDouble());
-    if (json.contains("useInitialPosition")) setUseInitialPosition(json["useInitialPosition"].toBool());
-    if (json.contains("initialX")) setInitialX(json["initialX"].toDouble());
-    if (json.contains("initialY")) setInitialY(json["initialY"].toDouble());
+    if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
 }
 
 } // namespace gizmotweak2

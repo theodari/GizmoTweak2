@@ -36,7 +36,12 @@ Item {
     property point startPos: Qt.point(sourceScenePos.x - minX, sourceScenePos.y - minY)
     property point endPos: Qt.point(targetScenePos.x - minX, targetScenePos.y - minY)
 
-    property color cableColor: !visible ? Theme.border : (connection.sourcePort.dataType === Port.DataType.Frame ? Theme.cableFrame : (connection.sourcePort.dataType === Port.DataType.Ratio2D ? Theme.cableRatio2D : (connection.sourcePort.dataType === Port.DataType.Ratio1D ? Theme.cableRatio1D : Theme.border)))
+    // Use effectiveDataType for proper coloring of RatioAny connections
+    property int effectiveType: visible ? connection.sourcePort.effectiveDataType : Port.DataType.Frame
+    property color cableColor: !visible ? Theme.border : (effectiveType === Port.DataType.Frame ? Theme.cableFrame : (effectiveType === Port.DataType.Ratio2D ? Theme.cableRatio2D : (effectiveType === Port.DataType.Ratio1D ? Theme.cableRatio1D : Theme.border)))
+
+    // Determine if this is a vertical connection (Frame type)
+    property bool isVertical: visible && effectiveType === Port.DataType.Frame
 
     // Visual properties based on state
     property color displayColor: selected ? Qt.lighter(cableColor, 1.4) : (hitArea.isHovering ? Qt.lighter(cableColor, 1.2) : cableColor)
@@ -45,13 +50,28 @@ Item {
     // Check if a point is near the bezier curve
     function isPointNearCurve(px, py, threshold) {
         var samples = 25
-        var dx = Math.abs(endPos.x - startPos.x)
-        var offset = Math.max(50, dx * 0.5)
 
         var p0x = startPos.x, p0y = startPos.y
-        var p1x = startPos.x + offset, p1y = startPos.y
-        var p2x = endPos.x - offset, p2y = endPos.y
+        var p1x, p1y, p2x, p2y
         var p3x = endPos.x, p3y = endPos.y
+
+        if (isVertical) {
+            // Vertical curve (Frame connections)
+            var dy = Math.abs(endPos.y - startPos.y)
+            var offset = Math.max(50, dy * 0.5)
+            p1x = startPos.x
+            p1y = startPos.y + offset
+            p2x = endPos.x
+            p2y = endPos.y - offset
+        } else {
+            // Horizontal curve (Ratio connections)
+            var dx = Math.abs(endPos.x - startPos.x)
+            var offset = Math.max(50, dx * 0.5)
+            p1x = startPos.x + offset
+            p1y = startPos.y
+            p2x = endPos.x - offset
+            p2y = endPos.y
+        }
 
         for (var i = 0; i <= samples; i++) {
             var t = i / samples
@@ -114,13 +134,16 @@ Item {
                 x: endPos.x
                 y: endPos.y
 
+                // For vertical (Frame) connections, curve vertically
+                // For horizontal (Ratio) connections, curve horizontally
                 property real dx: Math.abs(endPos.x - startPos.x)
-                property real offset: Math.max(50, dx * 0.5)
+                property real dy: Math.abs(endPos.y - startPos.y)
+                property real offset: isVertical ? Math.max(50, dy * 0.5) : Math.max(50, dx * 0.5)
 
-                control1X: startPos.x + offset
-                control1Y: startPos.y
-                control2X: endPos.x - offset
-                control2Y: endPos.y
+                control1X: isVertical ? startPos.x : startPos.x + offset
+                control1Y: isVertical ? startPos.y + offset : startPos.y
+                control2X: isVertical ? endPos.x : endPos.x - offset
+                control2Y: isVertical ? endPos.y - offset : endPos.y
             }
         }
     }

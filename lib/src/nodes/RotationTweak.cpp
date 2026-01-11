@@ -12,8 +12,8 @@ RotationTweak::RotationTweak(QObject* parent)
     setDisplayName(QStringLiteral("Rotation"));
 
     // Inputs
-    addInput(QStringLiteral("frame"), Port::DataType::Frame);
-    addInput(QStringLiteral("ratio"), Port::DataType::Ratio2D);
+    addInput(QStringLiteral("frame"), Port::DataType::Frame, true);  // Required
+    addInput(QStringLiteral("ratio"), Port::DataType::RatioAny);  // Accepts Ratio1D or Ratio2D
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
@@ -25,6 +25,7 @@ void RotationTweak::setAngle(qreal a)
     {
         _angle = a;
         emit angleChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -34,6 +35,7 @@ void RotationTweak::setCenterX(qreal cx)
     {
         _centerX = cx;
         emit centerXChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -43,14 +45,41 @@ void RotationTweak::setCenterY(qreal cy)
     {
         _centerY = cy;
         emit centerYChanged();
+        emitPropertyChanged();
     }
 }
 
-QPointF RotationTweak::apply(qreal x, qreal y, qreal ratio) const
+void RotationTweak::setFollowGizmo(bool follow)
+{
+    if (_followGizmo != follow)
+    {
+        _followGizmo = follow;
+
+        // Show/hide ratio port based on followGizmo
+        auto* ratioPort = inputAt(1);  // ratio port is at index 1
+        if (ratioPort)
+        {
+            ratioPort->setVisible(follow);
+            if (!follow && ratioPort->isConnected())
+            {
+                emit requestDisconnectPort(ratioPort);
+            }
+        }
+
+        emit followGizmoChanged();
+        emitPropertyChanged();
+    }
+}
+
+QPointF RotationTweak::apply(qreal x, qreal y, qreal ratio,
+                             qreal /*gizmoX*/, qreal /*gizmoY*/) const
 {
     // Effective angle based on ratio
     qreal effectiveAngle = _angle * ratio;
     qreal radians = qDegreesToRadians(effectiveAngle);
+
+    // Always use centerX/centerY as rotation center
+    // (followGizmo only controls whether ratio comes from gizmo or is 1.0)
 
     // Translate to origin (center)
     qreal dx = x - _centerX;
@@ -73,6 +102,7 @@ QJsonObject RotationTweak::propertiesToJson() const
     obj["angle"] = _angle;
     obj["centerX"] = _centerX;
     obj["centerY"] = _centerY;
+    obj["followGizmo"] = _followGizmo;
     return obj;
 }
 
@@ -81,6 +111,7 @@ void RotationTweak::propertiesFromJson(const QJsonObject& json)
     if (json.contains("angle")) setAngle(json["angle"].toDouble());
     if (json.contains("centerX")) setCenterX(json["centerX"].toDouble());
     if (json.contains("centerY")) setCenterY(json["centerY"].toDouble());
+    if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
 }
 
 } // namespace gizmotweak2
