@@ -1,5 +1,7 @@
 #include "NodeGraph.h"
 #include "Node.h"
+#include <algorithm>
+#include <limits>
 #include "Port.h"
 #include "Connection.h"
 #include "Commands.h"
@@ -56,6 +58,21 @@ void NodeGraph::connectUndoSignals()
     QObject::connect(&_undoStack, &QUndoStack::canRedoChanged, this, &NodeGraph::canRedoChanged);
     QObject::connect(&_undoStack, &QUndoStack::undoTextChanged, this, &NodeGraph::undoTextChanged);
     QObject::connect(&_undoStack, &QUndoStack::redoTextChanged, this, &NodeGraph::redoTextChanged);
+    QObject::connect(&_undoStack, &QUndoStack::cleanChanged, this, &NodeGraph::modifiedChanged);
+}
+
+void NodeGraph::setClean()
+{
+    _undoStack.setClean();
+}
+
+void NodeGraph::markAsModified()
+{
+    // Only push if currently clean (to avoid cluttering undo stack)
+    if (_undoStack.isClean())
+    {
+        _undoStack.push(new MarkModifiedCommand());
+    }
 }
 
 int NodeGraph::rowCount(const QModelIndex& parent) const
@@ -275,6 +292,9 @@ void NodeGraph::addNode(Node* node)
     // Connect to property changes for preview updates
     QObject::connect(node, &Node::propertyChanged, this, &NodeGraph::nodePropertyChanged);
 
+    // Connect to property changes for modified flag (operations outside undo system)
+    QObject::connect(node, &Node::propertyChanged, this, &NodeGraph::markAsModified);
+
     // Connect to port disconnect requests (e.g., when followGizmo is disabled)
     QObject::connect(node, &Node::requestDisconnectPort, this, &NodeGraph::disconnectPortInternal);
 
@@ -434,6 +454,82 @@ void NodeGraph::duplicateSelected()
     pasteAtPosition(pastePos);
 }
 
+void NodeGraph::alignSelected(const QString& mode)
+{
+    auto selected = selectedNodes();
+    if (selected.size() < 2) return;
+
+    // Collect current positions and compute bounding box
+    struct Info { Node* node; qreal x, y, w, h; };
+    QVector<Info> infos;
+    infos.reserve(selected.size());
+
+    qreal minX = std::numeric_limits<qreal>::max();
+    qreal minY = std::numeric_limits<qreal>::max();
+    qreal maxX = std::numeric_limits<qreal>::lowest();
+    qreal maxY = std::numeric_limits<qreal>::lowest();
+
+    for (auto* node : selected)
+    {
+        qreal w = 112;
+        qreal h = 78;
+        auto pos = node->position();
+        infos.append({node, pos.x(), pos.y(), w, h});
+        minX = std::min(minX, pos.x());
+        minY = std::min(minY, pos.y());
+        maxX = std::max(maxX, pos.x() + w);
+        maxY = std::max(maxY, pos.y() + h);
+    }
+
+    for (auto& inf : infos)
+    {
+        qreal nx = inf.x, ny = inf.y;
+        if (mode == QStringLiteral("left"))        nx = minX;
+        else if (mode == QStringLiteral("center")) nx = (minX + maxX) / 2.0 - inf.w / 2.0;
+        else if (mode == QStringLiteral("right"))  nx = maxX - inf.w;
+        else if (mode == QStringLiteral("top"))    ny = minY;
+        else if (mode == QStringLiteral("middle")) ny = (minY + maxY) / 2.0 - inf.h / 2.0;
+        else if (mode == QStringLiteral("bottom")) ny = maxY - inf.h;
+
+        inf.node->setPosition(QPointF(nx, ny));
+    }
+}
+
+void NodeGraph::distributeSelected(const QString& mode)
+{
+    auto selected = selectedNodes();
+    if (selected.size() < 3) return;
+
+    struct Info { Node* node; qreal x, y; };
+    QVector<Info> infos;
+    infos.reserve(selected.size());
+
+    for (auto* node : selected)
+    {
+        auto pos = node->position();
+        infos.append({node, pos.x(), pos.y()});
+    }
+
+    if (mode == QStringLiteral("horizontal"))
+    {
+        std::sort(infos.begin(), infos.end(), [](const Info& a, const Info& b) { return a.x < b.x; });
+        qreal first = infos.first().x;
+        qreal last = infos.last().x;
+        qreal step = (last - first) / (infos.size() - 1);
+        for (int i = 1; i < infos.size() - 1; ++i)
+            infos[i].node->setPosition(QPointF(first + step * i, infos[i].y));
+    }
+    else
+    {
+        std::sort(infos.begin(), infos.end(), [](const Info& a, const Info& b) { return a.y < b.y; });
+        qreal first = infos.first().y;
+        qreal last = infos.last().y;
+        qreal step = (last - first) / (infos.size() - 1);
+        for (int i = 1; i < infos.size() - 1; ++i)
+            infos[i].node->setPosition(QPointF(infos[i].x, first + step * i));
+    }
+}
+
 xengine::Frame* NodeGraph::evaluate(xengine::Frame* input, qreal time)
 {
     if (!_evaluator)
@@ -442,6 +538,16 @@ xengine::Frame* NodeGraph::evaluate(xengine::Frame* input, qreal time)
         _evaluator->setGraph(this);
     }
     return _evaluator->evaluate(input, time);
+}
+
+xengine::Frame* NodeGraph::evaluateUpTo(xengine::Frame* input, Node* stopNode, qreal time)
+{
+    if (!_evaluator)
+    {
+        _evaluator = new GraphEvaluator(this);
+        _evaluator->setGraph(this);
+    }
+    return _evaluator->evaluateUpTo(input, stopNode, time);
 }
 
 QVariantList NodeGraph::evaluatePoints(const QVariantList& sourcePoints, qreal time)
@@ -870,12 +976,9 @@ bool NodeGraph::hasSelection() const
 
 void NodeGraph::copySelected()
 {
-    qDebug() << "copySelected() called";
     auto selected = selectedNodes();
-    qDebug() << "Selected nodes count:" << selected.size();
     if (selected.isEmpty())
     {
-        qDebug() << "No nodes selected, returning";
         return;
     }
 
@@ -883,17 +986,14 @@ void NodeGraph::copySelected()
     QList<Node*> copyable;
     for (auto node : selected)
     {
-        qDebug() << "Checking node:" << node->type() << node->displayName();
         if (node->type() != QStringLiteral("Input") && node->type() != QStringLiteral("Output"))
         {
             copyable.append(node);
         }
     }
 
-    qDebug() << "Copyable nodes count:" << copyable.size();
     if (copyable.isEmpty())
     {
-        qDebug() << "No copyable nodes, returning";
         return;
     }
 
@@ -979,8 +1079,6 @@ void NodeGraph::copySelected()
     clipboard["connections"] = connectionsArray;
 
     _clipboard = clipboard;
-    qDebug() << "Clipboard set with" << nodesArray.size() << "nodes and" << connectionsArray.size() << "connections";
-    qDebug() << "canPaste is now:" << canPaste();
     emit canPasteChanged();
 }
 

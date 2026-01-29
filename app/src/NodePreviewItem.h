@@ -5,6 +5,7 @@
 #include <QHash>
 #include <QImage>
 
+#include <frame.h>
 #include "core/Node.h"
 #include "core/NodeGraph.h"
 #include "core/Port.h"
@@ -39,7 +40,7 @@ class NodePreviewItem : public QQuickPaintedItem
 
 public:
     explicit NodePreviewItem(QQuickItem* parent = nullptr);
-    ~NodePreviewItem() override = default;
+    ~NodePreviewItem() override;
 
     void paint(QPainter* painter) override;
 
@@ -95,10 +96,19 @@ private:
     // Compute full ratio grid for a node
     QVector<qreal> computeRatioGrid(gizmotweak2::Node* node, int resolution, qreal time) const;
 
+    // Draw tweak output frame
+    void paintTweakFrame(QPainter* painter);
+
+    // Find InputNode in graph
+    gizmotweak2::Node* findInputNode() const;
+
     gizmotweak2::Node* _node{nullptr};
     gizmotweak2::NodeGraph* _graph{nullptr};
     qreal _currentTime{0.0};
     int _resolution{16};
+
+    // Cached tweak frame (owned)
+    xengine::Frame* _tweakFrame{nullptr};
 
     // Static cache shared by all NodePreviewItem instances
     static RatioGridCache s_cache;

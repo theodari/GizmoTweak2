@@ -17,6 +17,10 @@ SplitTweak::SplitTweak(QObject* parent)
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
+
+    // Automation: Threshold track with splitThreshold (0)
+    auto* thresholdTrack = createAutomationTrack(QStringLiteral("Threshold"), 1, QColor(244, 164, 96));  // Sandy brown
+    thresholdTrack->setupParameter(0, 0.001, 4.0, _splitThreshold, tr("Threshold"), 1.0, QString());
 }
 
 void SplitTweak::setSplitThreshold(qreal threshold)
@@ -25,6 +29,8 @@ void SplitTweak::setSplitThreshold(qreal threshold)
     if (!qFuzzyCompare(_splitThreshold, threshold))
     {
         _splitThreshold = threshold;
+        auto* track = automationTrack(QStringLiteral("Threshold"));
+        if (track) track->setInitialValue(0, threshold);
         emit splitThresholdChanged();
         emitPropertyChanged();
     }
@@ -89,6 +95,16 @@ void SplitTweak::propertiesFromJson(const QJsonObject& json)
 {
     if (json.contains("splitThreshold")) setSplitThreshold(json["splitThreshold"].toDouble());
     if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
+}
+
+void SplitTweak::syncToAnimatedValues(int timeMs)
+{
+    // Only sync if automation is active
+    auto* thresholdTrack = automationTrack(QStringLiteral("Threshold"));
+    if (thresholdTrack && thresholdTrack->isAutomated())
+    {
+        _splitThreshold = thresholdTrack->timedValue(timeMs, 0);
+    }
 }
 
 } // namespace gizmotweak2

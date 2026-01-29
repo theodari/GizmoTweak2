@@ -3,6 +3,7 @@
 
 #include <QFile>
 #include <QDebug>
+#include <QJsonObject>
 #include <QtMath>
 
 namespace gizmotweak2
@@ -29,7 +30,6 @@ InputNode::InputNode(QObject* parent)
             int result = _patternStack.ildaLoad(path);
             if (result == 0 && _patternStack.size() > 0)
             {
-                qDebug() << "InputNode: Loaded" << _patternStack.size() << "patterns from" << path;
                 break;
             }
         }
@@ -38,7 +38,6 @@ InputNode::InputNode(QObject* parent)
     // If no patterns loaded, create default test patterns
     if (_patternStack.size() == 0)
     {
-        qDebug() << "InputNode: No ILDA file found, creating default patterns";
         createDefaultPatterns();
     }
 
@@ -85,6 +84,58 @@ xengine::Frame* InputNode::getPatternFrame(int index) const
         return _patternStack.get(index);
     }
     return nullptr;
+}
+
+bool InputNode::loadIldaFile(const QString& filePath)
+{
+    if (filePath.isEmpty())
+    {
+        qWarning() << "InputNode::loadIldaFile: Empty file path";
+        return false;
+    }
+
+    // Clear existing patterns and load new file
+    _patternStack.deleteAllFrames(false);
+
+    int result = _patternStack.ildaLoad(filePath);
+    if (result != 0 || _patternStack.size() == 0)
+    {
+        qWarning() << "InputNode::loadIldaFile: Failed to load" << filePath << "error:" << result;
+        // Restore default patterns on failure
+        createDefaultPatterns();
+        buildPatternNames();
+        setPatternIndex(0);
+        return false;
+    }
+
+    buildPatternNames();
+    setPatternIndex(0);
+    updateCurrentFrame();
+    return true;
+}
+
+bool InputNode::saveIldaFile(const QString& filePath) const
+{
+    if (filePath.isEmpty())
+    {
+        qWarning() << "InputNode::saveIldaFile: Empty file path";
+        return false;
+    }
+
+    if (_patternStack.size() == 0)
+    {
+        qWarning() << "InputNode::saveIldaFile: No patterns to save";
+        return false;
+    }
+
+    int result = const_cast<xengine::Stack&>(_patternStack).ildaSave(filePath);
+    if (result != 0)
+    {
+        qWarning() << "InputNode::saveIldaFile: Failed to save" << filePath << "error:" << result;
+        return false;
+    }
+
+    return true;
 }
 
 void InputNode::buildPatternNames()
@@ -209,6 +260,174 @@ void InputNode::createDefaultPatterns()
             frame->addSample(x, y, 0.0, color.redF(), color.greenF(), color.blueF(), 1);
         }
         _patternStack.append(frame, -1);
+    }
+}
+
+void InputNode::setDuration(int ms)
+{
+    ms = qMax(100, ms);  // Minimum 100ms
+    if (_duration != ms)
+    {
+        _duration = ms;
+        emit durationChanged();
+        emitPropertyChanged();
+    }
+}
+
+void InputNode::setBpm(qreal bpm)
+{
+    bpm = qBound(1.0, bpm, 999.0);
+    if (!qFuzzyCompare(_bpm, bpm))
+    {
+        _bpm = bpm;
+        emit bpmChanged();
+
+        // Update duration if using BPM timing
+        if (_useBpmTiming)
+        {
+            int newDuration = calculateDurationFromBpm();
+            if (_duration != newDuration)
+            {
+                _duration = newDuration;
+                emit durationChanged();
+            }
+        }
+        emitPropertyChanged();
+    }
+}
+
+void InputNode::setBeatsPerMeasure(int beats)
+{
+    beats = qBound(1, beats, 32);
+    if (_beatsPerMeasure != beats)
+    {
+        _beatsPerMeasure = beats;
+        emit beatsPerMeasureChanged();
+
+        // Update duration if using BPM timing
+        if (_useBpmTiming)
+        {
+            int newDuration = calculateDurationFromBpm();
+            if (_duration != newDuration)
+            {
+                _duration = newDuration;
+                emit durationChanged();
+            }
+        }
+        emitPropertyChanged();
+    }
+}
+
+void InputNode::setMeasures(int count)
+{
+    count = qBound(1, count, 999);
+    if (_measures != count)
+    {
+        _measures = count;
+        emit measuresChanged();
+
+        // Update duration if using BPM timing
+        if (_useBpmTiming)
+        {
+            int newDuration = calculateDurationFromBpm();
+            if (_duration != newDuration)
+            {
+                _duration = newDuration;
+                emit durationChanged();
+            }
+        }
+        emitPropertyChanged();
+    }
+}
+
+void InputNode::setUseBpmTiming(bool use)
+{
+    if (_useBpmTiming != use)
+    {
+        _useBpmTiming = use;
+        emit useBpmTimingChanged();
+
+        // Update duration if switching to BPM timing
+        if (_useBpmTiming)
+        {
+            int newDuration = calculateDurationFromBpm();
+            if (_duration != newDuration)
+            {
+                _duration = newDuration;
+                emit durationChanged();
+            }
+        }
+        emitPropertyChanged();
+    }
+}
+
+int InputNode::calculateDurationFromBpm() const
+{
+    // Duration = (measures * beatsPerMeasure) / bpm * 60 * 1000
+    // = totalBeats / bpm * 60000
+    int totalBeats = _measures * _beatsPerMeasure;
+    return static_cast<int>((totalBeats / _bpm) * 60000.0);
+}
+
+int InputNode::beatToMs(int beat) const
+{
+    // ms = beat / bpm * 60 * 1000
+    return static_cast<int>((beat / _bpm) * 60000.0);
+}
+
+int InputNode::measureToMs(int measure) const
+{
+    return beatToMs(measure * _beatsPerMeasure);
+}
+
+qreal InputNode::msToBeat(int ms) const
+{
+    // beat = ms / 60000 * bpm
+    return (ms / 60000.0) * _bpm;
+}
+
+QJsonObject InputNode::propertiesToJson() const
+{
+    QJsonObject obj;
+    obj["sourceType"] = static_cast<int>(_sourceType);
+    obj["patternIndex"] = _patternIndex;
+    obj["duration"] = _duration;
+    obj["bpm"] = _bpm;
+    obj["beatsPerMeasure"] = _beatsPerMeasure;
+    obj["measures"] = _measures;
+    obj["useBpmTiming"] = _useBpmTiming;
+    return obj;
+}
+
+void InputNode::propertiesFromJson(const QJsonObject& json)
+{
+    if (json.contains("sourceType"))
+    {
+        setSourceType(static_cast<SourceType>(json["sourceType"].toInt()));
+    }
+    if (json.contains("patternIndex"))
+    {
+        setPatternIndex(json["patternIndex"].toInt());
+    }
+    if (json.contains("useBpmTiming"))
+    {
+        setUseBpmTiming(json["useBpmTiming"].toBool());
+    }
+    if (json.contains("duration"))
+    {
+        setDuration(json["duration"].toInt());
+    }
+    if (json.contains("bpm"))
+    {
+        setBpm(json["bpm"].toDouble());
+    }
+    if (json.contains("beatsPerMeasure"))
+    {
+        setBeatsPerMeasure(json["beatsPerMeasure"].toInt());
+    }
+    if (json.contains("measures"))
+    {
+        setMeasures(json["measures"].toInt());
     }
 }
 

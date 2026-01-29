@@ -32,6 +32,7 @@ class NodeGraph : public QAbstractListModel
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY canPasteChanged)
     Q_PROPERTY(bool hasSelection READ hasSelection NOTIFY hasSelectionChanged)
     Q_PROPERTY(bool isGraphComplete READ isGraphComplete NOTIFY graphValidityChanged)
+    Q_PROPERTY(bool isModified READ isModified NOTIFY modifiedChanged)
 
 public:
     enum Roles
@@ -65,6 +66,11 @@ public:
     QString undoText() const { return _undoStack.undoText(); }
     QString redoText() const { return _undoStack.redoText(); }
 
+    // Modified state (based on undo stack clean index)
+    bool isModified() const { return !_undoStack.isClean(); }
+    Q_INVOKABLE void setClean();  // Call after save to mark as unmodified
+    Q_INVOKABLE void markAsModified();  // Call to mark graph as modified (for operations outside undo system)
+
     // Clipboard properties
     bool canPaste() const { return !_clipboard.isEmpty(); }
     bool hasSelection() const;
@@ -83,8 +89,15 @@ public:
     Q_INVOKABLE void selectAll();
     Q_INVOKABLE void duplicateSelected();
 
+    // Align/distribute selected nodes
+    Q_INVOKABLE void alignSelected(const QString& mode);       // "left","center","right","top","middle","bottom"
+    Q_INVOKABLE void distributeSelected(const QString& mode);   // "horizontal","vertical"
+
     // Graph evaluation - returns transformed Frame
     Q_INVOKABLE xengine::Frame* evaluate(xengine::Frame* input, qreal time = 0.0);
+
+    // Evaluate graph up to (and including) a specific node
+    xengine::Frame* evaluateUpTo(xengine::Frame* input, Node* stopNode, qreal time = 0.0);
 
     // Graph evaluation - returns transformed points array [{x,y,r,g,b}, ...]
     Q_INVOKABLE QVariantList evaluatePoints(const QVariantList& sourcePoints, qreal time = 0.0);
@@ -140,6 +153,7 @@ signals:
     void canPasteChanged();
     void hasSelectionChanged();
     void graphValidityChanged();
+    void modifiedChanged();
 
 private:
     void connectUndoSignals();

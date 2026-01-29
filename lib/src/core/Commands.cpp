@@ -453,4 +453,14 @@ void DisconnectCommand::redo()
     }
 }
 
+// ============================================================================
+// MarkModifiedCommand
+// ============================================================================
+
+MarkModifiedCommand::MarkModifiedCommand(QUndoCommand* parent)
+    : QUndoCommand(parent)
+{
+    setText(QObject::tr("Modify keyframes"));
+}
+
 } // namespace gizmotweak2

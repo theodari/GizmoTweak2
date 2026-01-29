@@ -14,6 +14,7 @@
 #include "nodes/SurfaceFactoryNode.h"
 #include "nodes/TimeShiftNode.h"
 #include "nodes/MirrorNode.h"
+#include "nodes/InputNode.h"
 
 using namespace gizmotweak2;
 
@@ -24,6 +25,11 @@ NodePreviewItem::NodePreviewItem(QQuickItem* parent)
     : QQuickPaintedItem(parent)
 {
     setRenderTarget(QQuickPaintedItem::FramebufferObject);
+}
+
+NodePreviewItem::~NodePreviewItem()
+{
+    delete _tweakFrame;
 }
 
 void NodePreviewItem::setNode(Node* node)
@@ -157,6 +163,9 @@ qreal NodePreviewItem::evaluateNode(Node* node, qreal x, qreal y, qreal time,
         auto* gizmo = qobject_cast<GizmoNode*>(node);
         if (gizmo)
         {
+            // Sync automation values to the given time before computing ratio
+            int timeMs = static_cast<int>(time * 1000.0);
+            gizmo->syncToAnimatedValues(timeMs);
             return gizmo->computeRatio(x, y, time);
         }
     }
@@ -167,6 +176,10 @@ qreal NodePreviewItem::evaluateNode(Node* node, qreal x, qreal y, qreal time,
         auto* group = qobject_cast<GroupNode*>(node);
         if (group)
         {
+            // Sync automation values to the given time before transforming coordinates
+            int timeMs = static_cast<int>(time * 1000.0);
+            group->syncToAnimatedValues(timeMs);
+
             // Transform coordinates using GroupNode method
             qreal x1, y1;
             group->transformCoordinates(x, y, x1, y1);
@@ -208,6 +221,10 @@ qreal NodePreviewItem::evaluateNode(Node* node, qreal x, qreal y, qreal time,
         auto* timeShift = qobject_cast<TimeShiftNode*>(node);
         if (timeShift)
         {
+            // Sync TimeShift's own automation (delay, scale, loopDuration) at current time
+            int timeMs = static_cast<int>(time * 1000.0);
+            timeShift->syncToAnimatedValues(timeMs);
+
             qreal shiftedTime = timeShift->shiftTime(time);
 
             for (auto* input : node->inputs())
@@ -231,6 +248,10 @@ qreal NodePreviewItem::evaluateNode(Node* node, qreal x, qreal y, qreal time,
         auto* mirror = qobject_cast<MirrorNode*>(node);
         if (mirror)
         {
+            // Sync automation values to the given time before mirroring coordinates
+            int timeMs = static_cast<int>(time * 1000.0);
+            mirror->syncToAnimatedValues(timeMs);
+
             // Get mirrored coordinates
             QPointF mirrored = mirror->mirror(x, y);
 
@@ -735,6 +756,45 @@ void NodePreviewItem::paintTweakIcon(QPainter* painter)
     }
 }
 
+Node* NodePreviewItem::findInputNode() const
+{
+    if (!_graph) return nullptr;
+
+    for (int i = 0; i < _graph->rowCount(); ++i)
+    {
+        auto* node = _graph->nodeAt(i);
+        if (node && node->type() == QStringLiteral("Input"))
+            return node;
+    }
+    return nullptr;
+}
+
+void NodePreviewItem::paintTweakFrame(QPainter* painter)
+{
+    painter->fillRect(boundingRect(), Qt::black);
+
+    if (!_node || !_graph) return;
+
+    // Find InputNode to get source frame
+    auto* inputNodeBase = findInputNode();
+    if (!inputNodeBase) return;
+
+    auto* inputNode = qobject_cast<InputNode*>(inputNodeBase);
+    if (!inputNode) return;
+
+    auto* sourceFrame = inputNode->currentFrame();
+    if (!sourceFrame || sourceFrame->size() == 0) return;
+
+    // Evaluate up to this tweak node
+    delete _tweakFrame;
+    _tweakFrame = _graph->evaluateUpTo(sourceFrame, _node, _currentTime);
+
+    if (!_tweakFrame || _tweakFrame->size() == 0) return;
+
+    // Render the frame
+    _tweakFrame->render(painter, 0, 0, static_cast<int>(width()), static_cast<int>(height()), 1.5);
+}
+
 void NodePreviewItem::paint(QPainter* painter)
 {
     if (!_node)
@@ -776,10 +836,10 @@ void NodePreviewItem::paint(QPainter* painter)
         return;
     }
 
-    // Tweaks - black background (icons shown separately in QML)
+    // Tweaks - render frame output
     if (cat == Node::Category::Tweak)
     {
-        painter->fillRect(boundingRect(), Qt::black);
+        paintTweakFrame(painter);
         return;
     }
 

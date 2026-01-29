@@ -17,6 +17,7 @@ RowLayout {
     property string suffix: ""
     property real displayRatio: 1.0  // Multiplier for display (e.g., 100 for percentages)
     property bool showAutomation: true
+    property bool reserveAutomationSpace: true  // Set to false when used inside ParameterGroup
 
     // Automation properties
     property var node: null           // The node this parameter belongs to
@@ -25,12 +26,23 @@ RowLayout {
     property int paramCount: 1        // Total number of parameters in the track
     property color trackColor: "#4080C0"  // Color for the automation track
 
+    // Automation track reference (for signal connections)
+    property var automationTrackRef: node && trackName ? node.automationTrack(trackName) : null
+
     // Computed automation state
-    property bool automationEnabled: {
-        if (!node || !trackName) return false
-        var track = node.automationTrack(trackName)
-        return track ? track.automated : false
+    property bool automationEnabled: automationTrackRef ? automationTrackRef.automated : false
+
+    // Listen to track automation changes
+    Connections {
+        target: automationTrackRef
+        function onAutomatedChanged() {
+            root.automationEnabled = automationTrackRef ? automationTrackRef.automated : false
+        }
     }
+
+    // Update track reference when node changes
+    onNodeChanged: automationTrackRef = node && trackName ? node.automationTrack(trackName) : null
+    onTrackNameChanged: automationTrackRef = node && trackName ? node.automationTrack(trackName) : null
 
     signal valueModified(real newValue)
     signal automationToggled(bool enabled)
@@ -40,22 +52,60 @@ RowLayout {
     function toggleAutomation(enabled) {
         if (!node || !trackName) return
 
-        if (enabled) {
-            // Create or get the track
-            var track = node.createAutomationTrack(trackName, paramCount, trackColor)
-            if (track) {
-                track.automated = true
-                // Setup this parameter
-                track.setupParameter(paramIndex, minValue, maxValue, value, label, displayRatio, suffix)
+        if (!enabled) {
+            confirmDisableDialog.open()
+            return
+        }
+
+        var track = node.createAutomationTrack(trackName, paramCount, trackColor)
+        if (track) {
+            track.automated = true
+            track.setupParameter(paramIndex, minValue, maxValue, value, label, displayRatio, suffix)
+        }
+        automationTrackRef = track
+        automationToggled(true)
+    }
+
+    // Confirmation dialog for disabling automation
+    Dialog {
+        id: confirmDisableDialog
+        title: qsTr("Disable Automation")
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        parent: Overlay.overlay
+
+        Label {
+            text: qsTr("Remove automation for \"%1\"?\nAll keyframes will be lost.").arg(root.trackName)
+            color: Theme.text
+        }
+
+        background: Rectangle {
+            color: Theme.surface
+            border.color: Theme.border
+            radius: 4
+        }
+
+        footer: DialogButtonBox {
+            Button {
+                text: qsTr("Remove")
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
             }
-        } else {
-            // Disable automation (but keep the track for potential re-enable)
-            var track = node.automationTrack(trackName)
+            Button {
+                text: qsTr("Cancel")
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+            }
+
+            background: Rectangle { color: "transparent" }
+        }
+
+        onAccepted: {
+            var track = root.node.automationTrack(root.trackName)
             if (track) {
                 track.automated = false
             }
+            root.automationTrackRef = track
+            root.automationToggled(false)
         }
-        automationToggled(enabled)
     }
 
     spacing: 2
@@ -70,6 +120,80 @@ RowLayout {
         elide: Text.ElideRight
     }
 
+    // Reset button (to the left of slider)
+    Button {
+        id: resetButton
+        Layout.preferredWidth: 20
+        Layout.preferredHeight: 20
+
+        onClicked: {
+            root.value = root.defaultValue
+            root.valueModified(root.defaultValue)
+            root.resetClicked()
+        }
+
+        background: Rectangle {
+            color: resetButton.down ? Theme.surfacePressed : (resetButton.hovered ? Theme.surfaceHover : Theme.surface)
+            border.color: Theme.border
+            radius: 4
+        }
+
+        contentItem: Item {
+            Canvas {
+                id: resetCanvas
+                anchors.centerIn: parent
+                width: 14
+                height: 14
+
+                onPaint: {
+                    var ctx = getContext("2d")
+                    ctx.reset()
+                    var c = resetButton.hovered ? Theme.text : Theme.textMuted
+                    ctx.fillStyle = c
+                    ctx.strokeStyle = c
+                    ctx.lineWidth = 1.5
+
+                    var cx = width / 2
+                    var cy = height / 2
+                    var hw = 5  // half-width of triangles
+                    var hh = 5  // half-height of triangles
+                    var gap = 1.5  // gap from center line
+
+                    // Left triangle pointing right (toward center)
+                    ctx.beginPath()
+                    ctx.moveTo(0, cy - hh)
+                    ctx.lineTo(0, cy + hh)
+                    ctx.lineTo(cx - gap, cy)
+                    ctx.closePath()
+                    ctx.fill()
+
+                    // Right triangle pointing left (toward center)
+                    ctx.beginPath()
+                    ctx.moveTo(width, cy - hh)
+                    ctx.lineTo(width, cy + hh)
+                    ctx.lineTo(cx + gap, cy)
+                    ctx.closePath()
+                    ctx.fill()
+
+                    // Center vertical line
+                    ctx.beginPath()
+                    ctx.moveTo(cx, cy - hh)
+                    ctx.lineTo(cx, cy + hh)
+                    ctx.stroke()
+                }
+
+                Connections {
+                    target: resetButton
+                    function onHoveredChanged() { resetCanvas.requestPaint() }
+                }
+            }
+        }
+
+        ToolTip.visible: enabled && hovered
+        ToolTip.text: qsTr("Reset to default (%1)").arg(root.defaultValue)
+        ToolTip.delay: 500
+    }
+
     // Slider (JumpSlider behavior)
     Slider {
         id: slider
@@ -78,11 +202,20 @@ RowLayout {
 
         from: root.minValue
         to: root.maxValue
-        value: root.value
         stepSize: root.stepSize
 
-        // Update value when slider moves
-        onMoved: root.valueModified(value)
+        // Use Binding to allow programmatic updates without breaking the binding
+        Binding on value {
+            value: root.value
+            when: !slider.pressed
+        }
+
+        // Only emit valueModified on release, not during drag
+        onPressedChanged: {
+            if (!pressed) {
+                root.valueModified(value)
+            }
+        }
 
         // Double-click to reset
         MouseArea {
@@ -91,7 +224,6 @@ RowLayout {
             propagateComposedEvents: true
 
             onDoubleClicked: {
-                root.value = root.defaultValue
                 root.valueModified(root.defaultValue)
                 root.resetClicked()
             }
@@ -104,7 +236,6 @@ RowLayout {
                 // Snap to step
                 newValue = Math.round(newValue / root.stepSize) * root.stepSize
                 newValue = Math.max(root.minValue, Math.min(root.maxValue, newValue))
-                slider.value = newValue
                 root.valueModified(newValue)
                 mouse.accepted = false  // Let slider handle dragging
             }
@@ -145,22 +276,19 @@ RowLayout {
 
         from: Math.round(root.minValue * root.displayRatio)
         to: Math.round(root.maxValue * root.displayRatio)
-        value: Math.round(root.value * root.displayRatio)
-        stepSize: Math.round(root.stepSize * root.displayRatio)
+        stepSize: 1
 
         editable: true
+
+        // Use Binding to sync with slider value during drag, or root.value otherwise
+        Binding on value {
+            value: Math.round((slider.pressed ? slider.value : root.value) * root.displayRatio)
+            when: !spinBox.activeFocus
+        }
 
         onValueModified: {
             var realValue = value / root.displayRatio
             root.valueModified(realValue)
-        }
-
-        // Update when external value changes
-        Connections {
-            target: root
-            function onValueChanged() {
-                spinBox.value = Math.round(root.value * root.displayRatio)
-            }
         }
 
         textFromValue: function(value, locale) {
@@ -224,45 +352,22 @@ RowLayout {
         }
     }
 
-    // Reset button
-    Button {
-        id: resetButton
-        Layout.preferredWidth: 20
-        Layout.preferredHeight: 20
+    // Wrapper for gear button - can be hidden completely when inside ParameterGroup
+    Item {
+        implicitWidth: root.reserveAutomationSpace ? 20 : 0
+        implicitHeight: root.reserveAutomationSpace ? 20 : 0
+        visible: root.reserveAutomationSpace
 
-        onClicked: {
-            root.value = root.defaultValue
-            root.valueModified(root.defaultValue)
-            root.resetClicked()
-        }
+        GearButton {
+            id: gearButton
+            anchors.fill: parent
+            visible: root.showAutomation && root.node && root.trackName
+            automationEnabled: root.automationEnabled
 
-        background: Rectangle {
-            color: resetButton.down ? Theme.surfacePressed : (resetButton.hovered ? Theme.surfaceHover : Theme.surface)
-            border.color: Theme.border
-            radius: 4
-        }
-
-        contentItem: Text {
-            text: "↺"
-            color: Theme.text
-            font.pixelSize: 12
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-
-        ToolTip.visible: enabled && hovered
-        ToolTip.text: qsTr("Reset to default (%1)").arg(root.defaultValue)
-        ToolTip.delay: 500
-    }
-
-    // Gear button for automation
-    GearButton {
-        id: gearButton
-        visible: root.showAutomation && root.node && root.trackName
-        automationEnabled: root.automationEnabled
-
-        onClicked: {
-            root.toggleAutomation(!root.automationEnabled)
+            onClicked: {
+                root.toggleAutomation(!root.automationEnabled)
+            }
         }
     }
 }
+

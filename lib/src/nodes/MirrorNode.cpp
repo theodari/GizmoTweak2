@@ -16,6 +16,10 @@ MirrorNode::MirrorNode(QObject* parent)
 
     // Output: mirrored shape
     addOutput(QStringLiteral("shape"), Port::DataType::Ratio2D);
+
+    // Automation: Angle track with customAngle (0)
+    auto* angleTrack = createAutomationTrack(QStringLiteral("Angle"), 1, QColor(255, 140, 0));  // Dark orange
+    angleTrack->setupParameter(0, -180.0, 180.0, _customAngle, tr("Angle"), 1.0, QStringLiteral("°"));
 }
 
 void MirrorNode::setAxis(Axis a)
@@ -112,6 +116,16 @@ void MirrorNode::propertiesFromJson(const QJsonObject& json)
     if (json.contains("customAngle"))
     {
         setCustomAngle(json["customAngle"].toDouble());
+    }
+}
+
+void MirrorNode::syncToAnimatedValues(int timeMs)
+{
+    // Only sync if automation is active
+    auto* angleTrack = automationTrack(QStringLiteral("Angle"));
+    if (angleTrack && angleTrack->isAutomated())
+    {
+        _customAngle = angleTrack->timedValue(timeMs, 0);
     }
 }
 

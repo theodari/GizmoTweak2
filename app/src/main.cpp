@@ -6,9 +6,9 @@
 #include <QtQml/qqmlextensionplugin.h>
 
 #include "gizmotweaklib2.h"
-#include "engine/LaserEngine.h"
 #include "ExcaliburEngine.h"
 #include "RecentFilesManager.h"
+#include "PatternImageProvider.h"
 
 Q_IMPORT_QML_PLUGIN(GizmoTweakLib2Plugin)
 
@@ -16,9 +16,9 @@ int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);
 
-    app.setApplicationName("GizmoTweak2 (Excalibur)");
+    app.setApplicationName("GizmoTweak2");
     app.setApplicationVersion(gizmotweak2::version());
-    app.setOrganizationName("Excalibur Laser Systems");
+    app.setOrganizationName("GizmoTweak");
 
     QQuickStyle::setStyle("Basic");
 
@@ -31,6 +31,9 @@ int main(int argc, char* argv[])
     // Create the recent files manager
     auto* recentFilesManager = new RecentFilesManager();
 
+    // Create the pattern image provider
+    auto* patternProvider = new PatternImageProvider();
+
     QQmlApplicationEngine engine;
 
     // Expose the laser engine to QML
@@ -38,6 +41,10 @@ int main(int argc, char* argv[])
 
     // Expose the recent files manager to QML
     engine.rootContext()->setContextProperty("recentFiles", recentFilesManager);
+
+    // Register image provider and expose to QML for graph binding
+    engine.addImageProvider("patterns", patternProvider);
+    engine.rootContext()->setContextProperty("patternProvider", patternProvider);
 
     // Ajouter le chemin vers les modules QML de la lib
     engine.addImportPath(QCoreApplication::applicationDirPath());

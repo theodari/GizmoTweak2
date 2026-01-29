@@ -90,7 +90,6 @@ void TestNodePersistence::testGizmoNodeRoundtrip()
     original.setCenterY(-0.2);
     original.setHorizontalBorder(0.7);
     original.setVerticalBorder(0.4);
-    original.setFalloff(0.15);
     original.setFalloffCurve(2);  // Different curve
     original.setHorizontalBend(0.1);
     original.setVerticalBend(-0.1);
@@ -111,7 +110,6 @@ void TestNodePersistence::testGizmoNodeRoundtrip()
     QVERIFY(fuzzyCompare(restored.centerY(), -0.2));
     QVERIFY(fuzzyCompare(restored.horizontalBorder(), 0.7));
     QVERIFY(fuzzyCompare(restored.verticalBorder(), 0.4));
-    QVERIFY(fuzzyCompare(restored.falloff(), 0.15));
     QCOMPARE(restored.falloffCurve(), 2);
     QVERIFY(fuzzyCompare(restored.horizontalBend(), 0.1));
     QVERIFY(fuzzyCompare(restored.verticalBend(), -0.1));
@@ -288,9 +286,8 @@ void TestNodePersistence::testRotationTweakRoundtrip()
 void TestNodePersistence::testColorTweakRoundtrip()
 {
     ColorTweak original;
-    original.setMode(ColorTweak::Mode::Multiply);
     original.setColor(QColor(128, 64, 255, 200));
-    original.setIntensity(0.75);
+    original.setAlpha(0.75);
     original.setAffectRed(false);
     original.setAffectGreen(true);
     original.setAffectBlue(true);
@@ -305,11 +302,10 @@ void TestNodePersistence::testColorTweakRoundtrip()
     ColorTweak restored;
     restored.propertiesFromJson(json);
 
-    QCOMPARE(restored.mode(), ColorTweak::Mode::Multiply);
     QCOMPARE(restored.color().red(), 128);
     QCOMPARE(restored.color().green(), 64);
     QCOMPARE(restored.color().blue(), 255);
-    QVERIFY(fuzzyCompare(restored.intensity(), 0.75));
+    QVERIFY(fuzzyCompare(restored.alpha(), 0.75));
     QVERIFY(!restored.affectRed());
     QVERIFY(restored.affectGreen());
     QVERIFY(restored.affectBlue());

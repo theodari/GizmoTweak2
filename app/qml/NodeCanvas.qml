@@ -33,11 +33,11 @@ Item {
     property bool isSelectingZoomArea: false
 
     function zoomIn() {
-        zoomScale = Math.min(maxZoom, zoomScale * 1.2)
+        zoomScale = Math.min(maxZoom, zoomScale * 1.1)
     }
 
     function zoomOut() {
-        zoomScale = Math.max(minZoom, zoomScale / 1.2)
+        zoomScale = Math.max(minZoom, zoomScale / 1.1)
     }
 
     function resetZoom() {
@@ -70,6 +70,7 @@ Item {
         // Center the view on nodes
         flickable.contentX = centerX * zoomScale - flickable.width / 2
         flickable.contentY = centerY * zoomScale - flickable.height / 2
+        flickable.clampScroll(false)
     }
 
     function zoomToFit() {
@@ -107,9 +108,11 @@ Item {
         zoomScale = Math.min(Math.min(scaleX, scaleY), maxZoom)
         zoomScale = Math.max(zoomScale, minZoom)
 
-        // Center content
-        flickable.contentX = minX * zoomScale - (flickable.width - contentW * zoomScale) / 2
-        flickable.contentY = minY * zoomScale - (flickable.height - contentH * zoomScale) / 2
+        // Center bounding box in view (no clamping to allow proper centering)
+        var centerX = (minX + maxX) / 2
+        var centerY = (minY + maxY) / 2
+        flickable.contentX = centerX * zoomScale - flickable.width / 2
+        flickable.contentY = centerY * zoomScale - flickable.height / 2
     }
 
     function zoomToArea(x1, y1, x2, y2) {
@@ -135,6 +138,7 @@ Item {
         var centerY = (minY + maxY) / 2
         flickable.contentX = centerX * zoomScale - flickable.width / 2
         flickable.contentY = centerY * zoomScale - flickable.height / 2
+        flickable.clampScroll(false)
     }
 
     function startZoomAreaSelection() {
@@ -173,6 +177,7 @@ Item {
 
     signal selectionChanged()
     signal nodeClicked(var node)      // Any click on a node
+    signal nodeDoubleClicked(var node) // Double-click on a node
     signal emptyCanvasClicked()       // Click on empty canvas
     signal connectionClicked()        // Click on a connection
 
@@ -190,6 +195,118 @@ Item {
         selectedConnection = null
         selectedNode = null
         selectionChanged()
+    }
+
+    // Snap threshold for cable alignment (in pixels)
+    readonly property real cableSnapThreshold: 8
+
+    // Compute port center position for a node at a given position
+    // Returns {x, y} for each port based on its placement side
+    function portAbsolutePos(nodePos, nodeW, nodeH, port) {
+        // Determine port side from port properties
+        var isFrame = (port.dataType === Port.DataType.Frame)
+        var isInput = (port.direction === Port.Direction.In)
+        var isRatio = !isFrame
+
+        // For tweak nodes: frame in = top, frame out = bottom, ratio in = left
+        // For shape/utility: inputs = left, outputs = right
+        // For IO: input node output = bottom, output node input = top
+
+        var node = port.node
+        if (!node) return null
+
+        var cat = node.category
+        var type = node.type
+
+        if (cat === Node.Category.Tweak) {
+            if (isFrame && isInput)
+                return Qt.point(nodePos.x + nodeW / 2, nodePos.y)  // top center
+            if (isFrame && !isInput)
+                return Qt.point(nodePos.x + nodeW / 2, nodePos.y + nodeH)  // bottom center
+            if (isRatio && isInput)
+                return Qt.point(nodePos.x, nodePos.y + nodeH / 2)  // left center
+        } else if (cat === Node.Category.IO) {
+            if (type === "Input" && !isInput)
+                return Qt.point(nodePos.x + nodeW / 2, nodePos.y + nodeH)  // bottom
+            if (type === "Output" && isInput)
+                return Qt.point(nodePos.x + nodeW / 2, nodePos.y)  // top
+        } else {
+            // Shape, Utility
+            if (isInput)
+                return Qt.point(nodePos.x, nodePos.y + nodeH / 2)  // left
+            if (!isInput)
+                return Qt.point(nodePos.x + nodeW, nodePos.y + nodeH / 2)  // right
+        }
+        return null
+    }
+
+    // Snap a node position so that its connected cables align vertically or horizontally
+    function snapToConnectionAlignment(nodeData, desiredPos, nodeW, nodeH) {
+        if (!nodeData || !graph) return desiredPos
+
+        var snapX = desiredPos.x
+        var snapY = desiredPos.y
+        var bestDx = cableSnapThreshold + 1
+        var bestDy = cableSnapThreshold + 1
+
+        var conns = graph.connections
+        for (var i = 0; i < conns.length; i++) {
+            var conn = conns[i]
+            var srcPort = conn.sourcePort
+            var tgtPort = conn.targetPort
+            if (!srcPort || !tgtPort) continue
+
+            // Determine which port belongs to the dragged node and which is remote
+            var localPort = null
+            var remotePort = null
+            if (srcPort.node === nodeData) {
+                localPort = srcPort
+                remotePort = tgtPort
+            } else if (tgtPort.node === nodeData) {
+                localPort = tgtPort
+                remotePort = srcPort
+            } else {
+                continue
+            }
+
+            // Get the local port position at the desired pos
+            var localPos = portAbsolutePos(Qt.point(desiredPos.x, desiredPos.y), nodeW, nodeH, localPort)
+            if (!localPos) continue
+
+            // Get remote port position at remote node's current position
+            var remoteNode = remotePort.node
+            if (!remoteNode) continue
+
+            // Find remote node item to get its dimensions
+            var remoteItem = null
+            for (var j = 0; j < nodesRepeater.count; j++) {
+                var item = nodesRepeater.itemAt(j)
+                if (item && item.nodeData === remoteNode) {
+                    remoteItem = item
+                    break
+                }
+            }
+            if (!remoteItem) continue
+
+            var remotePos = portAbsolutePos(remoteNode.position, remoteItem.width, remoteItem.height, remotePort)
+            if (!remotePos) continue
+
+            // Check X alignment (vertical cable)
+            var dx = Math.abs(localPos.x - remotePos.x)
+            if (dx < cableSnapThreshold && dx < bestDx) {
+                bestDx = dx
+                snapX = desiredPos.x + (remotePos.x - localPos.x)
+            }
+
+            // Check Y alignment (horizontal cable)
+            var dy = Math.abs(localPos.y - remotePos.y)
+            if (dy < cableSnapThreshold && dy < bestDy) {
+                bestDy = dy
+                snapY = desiredPos.y + (remotePos.y - localPos.y)
+            }
+        }
+
+        return Qt.point(snapX, snapY)
     }
 
     // Find non-overlapping position for a node
@@ -296,13 +413,68 @@ Item {
         return null
     }
 
-    Flickable {
-        id: flickable
+    // Manual pan/zoom container (no Flickable scrolling interference)
+    Item {
+        id: flickable  // Keep id for compatibility
         anchors.fill: parent
-        contentWidth: canvasWidth * zoomScale
-        contentHeight: canvasHeight * zoomScale
         clip: true
-        interactive: !zoomAreaMode  // Disable panning when selecting zoom area
+
+        // Manual scroll position (replaces Flickable's contentX/Y)
+        property real contentX: 0
+        property real contentY: 0
+        property real contentWidth: canvasWidth * zoomScale
+        property real contentHeight: canvasHeight * zoomScale
+
+        // Elastic scrolling settings
+        property real borderOverflow: 3        // Pixels of border visible at rest
+        property real elasticOverflow: 30      // Max elastic overflow when dragging
+        property bool isInteracting: panHandler.active || wheelHandler.isWheeling
+
+        // Animated scroll for snap-back
+        Behavior on contentX {
+            enabled: !flickable.isInteracting
+            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+        }
+        Behavior on contentY {
+            enabled: !flickable.isInteracting
+            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+        }
+
+        // Clamp scroll to valid bounds (with optional elasticity)
+        function clampScroll(elastic) {
+            var minX = -borderOverflow
+            var minY = -borderOverflow
+            var maxX = Math.max(-borderOverflow, contentWidth - width + borderOverflow)
+            var maxY = Math.max(-borderOverflow, contentHeight - height + borderOverflow)
+
+            if (elastic) {
+                // Allow elastic overflow during interaction
+                minX = -borderOverflow - elasticOverflow
+                minY = -borderOverflow - elasticOverflow
+                maxX = Math.max(minX, contentWidth - width + borderOverflow + elasticOverflow)
+                maxY = Math.max(minY, contentHeight - height + borderOverflow + elasticOverflow)
+            }
+
+            contentX = Math.max(minX, Math.min(maxX, contentX))
+            contentY = Math.max(minY, Math.min(maxY, contentY))
+        }
+
+        // Snap back to proper bounds when interaction ends
+        function snapToBounds() {
+            var minX = -borderOverflow
+            var minY = -borderOverflow
+            var maxX = Math.max(-borderOverflow, contentWidth - width + borderOverflow)
+            var maxY = Math.max(-borderOverflow, contentHeight - height + borderOverflow)
+
+            contentX = Math.max(minX, Math.min(maxX, contentX))
+            contentY = Math.max(minY, Math.min(maxY, contentY))
+        }
+
+        // Dark background showing out-of-bounds area
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.darker(Theme.background, 1.3)
+        }
 
         // Drop area for nodes from toolbar
         DropArea {
@@ -323,7 +495,6 @@ Item {
                     // Get node type from drag source
                     var nodeType = drop.source.nodeType
                     if (nodeType) {
-                        console.log("Creating node:", nodeType, "at", canvasX, canvasY)
                         graph.createNode(nodeType, Qt.point(canvasX, canvasY))
                     }
                 }
@@ -341,49 +512,93 @@ Item {
         // Mouse wheel handler for zoom and scroll
         WheelHandler {
             id: wheelHandler
-            target: null  // Don't move target, handle manually
+            target: null
+            property bool isWheeling: false  // Track wheel activity for animation disable
+
             onWheel: function(event) {
+                isWheeling = true
+                wheelTimer.restart()
+
                 var delta = event.angleDelta.y
-                var scrollAmount = 60  // Pixels to scroll per wheel step
+                var scrollAmount = 60
 
                 if (event.modifiers & Qt.ControlModifier) {
                     // Ctrl+wheel = vertical scroll
-                    flickable.contentY = Math.max(0, Math.min(
-                        flickable.contentHeight - flickable.height,
-                        flickable.contentY - delta * scrollAmount / 120
-                    ))
+                    flickable.contentY -= delta * scrollAmount / 120
+                    flickable.clampScroll(false)
                 } else if (event.modifiers & Qt.ShiftModifier) {
                     // Shift+wheel = horizontal scroll
-                    flickable.contentX = Math.max(0, Math.min(
-                        flickable.contentWidth - flickable.width,
-                        flickable.contentX - delta * scrollAmount / 120
-                    ))
+                    flickable.contentX -= delta * scrollAmount / 120
+                    flickable.clampScroll(false)
                 } else {
                     // Plain wheel = zoom towards mouse position
                     var oldScale = zoomScale
+                    var zoomFactor = 1.033
                     if (delta > 0) {
-                        zoomScale = Math.min(maxZoom, zoomScale * 1.1)
+                        zoomScale = Math.min(maxZoom, zoomScale * zoomFactor)
                     } else {
-                        zoomScale = Math.max(minZoom, zoomScale / 1.1)
+                        zoomScale = Math.max(minZoom, zoomScale / zoomFactor)
                     }
 
-                    // Zoom towards mouse position
                     if (oldScale !== zoomScale) {
-                        var mouseX = event.x + flickable.contentX
-                        var mouseY = event.y + flickable.contentY
-                        var factor = zoomScale / oldScale
+                        // Mouse position in viewport
+                        var viewportX = event.x
+                        var viewportY = event.y
 
-                        flickable.contentX = mouseX * factor - event.x
-                        flickable.contentY = mouseY * factor - event.y
+                        // Canvas point under cursor (unscaled coordinates)
+                        var canvasX = (viewportX + flickable.contentX) / oldScale
+                        var canvasY = (viewportY + flickable.contentY) / oldScale
+
+                        // Where that canvas point is after zoom
+                        var newPosX = canvasX * zoomScale
+                        var newPosY = canvasY * zoomScale
+
+                        // Adjust scroll to keep canvas point under cursor
+                        flickable.contentX = newPosX - viewportX
+                        flickable.contentY = newPosY - viewportY
+                        flickable.clampScroll(false)
                     }
                 }
             }
         }
 
-        // Scaled content container
+        // Timer for wheel activity tracking (outside WheelHandler)
+        Timer {
+            id: wheelTimer
+            interval: 100
+            onTriggered: wheelHandler.isWheeling = false
+        }
+
+        // Drag handler for panning
+        DragHandler {
+            id: panHandler
+            target: null
+            enabled: !zoomAreaMode
+
+            onTranslationChanged: {
+                flickable.contentX -= translation.x - prevTranslation.x
+                flickable.contentY -= translation.y - prevTranslation.y
+                prevTranslation = translation
+                flickable.clampScroll(true)  // Allow elastic during drag
+            }
+
+            property point prevTranslation: Qt.point(0, 0)
+            onActiveChanged: {
+                if (active) {
+                    prevTranslation = Qt.point(0, 0)
+                } else {
+                    // Snap back when drag ends
+                    flickable.snapToBounds()
+                }
+            }
+        }
+
+        // Scaled content container - positioned manually
         Item {
             id: scaledContent
             objectName: "scaledContent"
+            x: -flickable.contentX
+            y: -flickable.contentY
             width: canvasWidth
             height: canvasHeight
             scale: zoomScale
@@ -441,14 +656,14 @@ Item {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 cursorShape: zoomAreaMode ? Qt.CrossCursor : Qt.ArrowCursor
 
-                onClicked: function(mouse) {
+                property bool wasDragged: false
+
+                onPressed: function(mouse) {
+                    wasDragged = false
                     if (mouse.button === Qt.LeftButton && !zoomAreaMode) {
                         clearAllSelections()
                         emptyCanvasClicked()
                     }
-                }
-
-                onPressed: function(mouse) {
                     if (mouse.button === Qt.RightButton) {
                         // Cancel zoom area mode on right click
                         if (zoomAreaMode) {
@@ -524,9 +739,6 @@ Item {
 
                     onDeleteRequested: {
                         graph.disconnect(model.connectionObj)
-                        if (root.selectedConnection === model.connectionObj) {
-                            root.selectedConnection = null
-                        }
                     }
                 }
             }
@@ -538,6 +750,9 @@ Item {
                     connectionsModel.append({ "connectionObj": conn })
                 }
                 function onConnectionRemoved(conn) {
+                    if (root.selectedConnection === conn) {
+                        root.selectedConnection = null
+                    }
                     for (var i = 0; i < connectionsModel.count; i++) {
                         if (connectionsModel.get(i).connectionObj === conn) {
                             connectionsModel.remove(i)
@@ -623,22 +838,66 @@ Item {
         }
     }
 
+    // Align/distribute: delegate to C++ (QML iteration of Node* lists is unreliable)
+    function alignNodes(mode) { graph.alignSelected(mode) }
+    function distributeNodes(mode) { graph.distributeSelected(mode) }
+
+    // Delete confirmation dialog
+    Dialog {
+        id: deleteConfirmDialog
+        title: qsTr("Confirm Delete")
+        modal: true
+        anchors.centerIn: parent
+
+        property int nodeCount: 0
+
+        Label {
+            text: qsTr("Delete %1 node(s)?").arg(deleteConfirmDialog.nodeCount)
+            color: Theme.text
+        }
+
+        background: Rectangle {
+            color: Theme.surface
+            border.color: Theme.border
+            radius: 4
+        }
+
+        standardButtons: Dialog.Ok | Dialog.Cancel
+
+        onAccepted: {
+            var selected = graph.selectedNodes()
+            for (var i = 0; i < selected.length; i++) {
+                if (selected[i].type !== "Input" && selected[i].type !== "Output") {
+                    graph.removeNode(selected[i].uuid)
+                }
+            }
+        }
+    }
+
+    function confirmDeleteSelected() {
+        var selected = graph.selectedNodes()
+        // Filter out Input/Output
+        var deletable = 0
+        for (var i = 0; i < selected.length; i++) {
+            if (selected[i].type !== "Input" && selected[i].type !== "Output")
+                deletable++
+        }
+        if (deletable === 0) return
+        deleteConfirmDialog.nodeCount = deletable
+        deleteConfirmDialog.open()
+    }
+
     // Delete selected items function
     function deleteSelected() {
-        // Delete selected connection first
+        // Delete selected connection first (no confirmation needed)
         if (selectedConnection) {
             graph.disconnect(selectedConnection)
             selectedConnection = null
             return
         }
 
-        // Then delete selected nodes (except Input/Output)
-        var selected = graph.selectedNodes()
-        for (var i = 0; i < selected.length; ++i) {
-            if (selected[i].type !== "Input" && selected[i].type !== "Output") {
-                graph.removeNode(selected[i].uuid)
-            }
-        }
+        // Delete selected nodes with confirmation
+        confirmDeleteSelected()
     }
 
     // Keyboard shortcuts

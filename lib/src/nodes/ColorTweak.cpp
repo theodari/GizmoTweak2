@@ -17,16 +17,21 @@ ColorTweak::ColorTweak(QObject* parent)
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
-}
 
-void ColorTweak::setMode(Mode m)
-{
-    if (_mode != m)
-    {
-        _mode = m;
-        emit modeChanged();
-        emitPropertyChanged();
-    }
+    // Automation: Color track with R (0), G (1), B (2), Alpha (3)
+    auto* colorTrack = createAutomationTrack(QStringLiteral("Color"), 4, QColor(220, 20, 60));
+    colorTrack->setupParameter(0, 0.0, 1.0, _color.redF(), tr("Red"), 100.0, QStringLiteral("%"));
+    colorTrack->setupParameter(1, 0.0, 1.0, _color.greenF(), tr("Green"), 100.0, QStringLiteral("%"));
+    colorTrack->setupParameter(2, 0.0, 1.0, _color.blueF(), tr("Blue"), 100.0, QStringLiteral("%"));
+    colorTrack->setupParameter(3, -2.0, 2.0, _alpha, tr("Alpha"), 100.0, QStringLiteral("%"));
+
+    auto* filterTrack = createAutomationTrack(QStringLiteral("Filter"), 6, QColor(100, 149, 237));
+    filterTrack->setupParameter(0, 0.0, 1.0, _filterRedMin, tr("R Min"), 100.0, QStringLiteral("%"));
+    filterTrack->setupParameter(1, 0.0, 1.0, _filterRedMax, tr("R Max"), 100.0, QStringLiteral("%"));
+    filterTrack->setupParameter(2, 0.0, 1.0, _filterGreenMin, tr("G Min"), 100.0, QStringLiteral("%"));
+    filterTrack->setupParameter(3, 0.0, 1.0, _filterGreenMax, tr("G Max"), 100.0, QStringLiteral("%"));
+    filterTrack->setupParameter(4, 0.0, 1.0, _filterBlueMin, tr("B Min"), 100.0, QStringLiteral("%"));
+    filterTrack->setupParameter(5, 0.0, 1.0, _filterBlueMax, tr("B Max"), 100.0, QStringLiteral("%"));
 }
 
 void ColorTweak::setColor(const QColor& c)
@@ -34,18 +39,29 @@ void ColorTweak::setColor(const QColor& c)
     if (_color != c)
     {
         _color = c;
+        // Sync to automation track initial values (R, G, B)
+        auto* track = automationTrack(QStringLiteral("Color"));
+        if (track)
+        {
+            track->setInitialValue(0, c.redF());
+            track->setInitialValue(1, c.greenF());
+            track->setInitialValue(2, c.blueF());
+        }
         emit colorChanged();
         emitPropertyChanged();
     }
 }
 
-void ColorTweak::setIntensity(qreal i)
+void ColorTweak::setAlpha(qreal a)
 {
-    i = qBound(0.0, i, 1.0);
-    if (!qFuzzyCompare(_intensity, i))
+    a = qBound(-2.0, a, 2.0);
+    if (!qFuzzyCompare(_alpha, a))
     {
-        _intensity = i;
-        emit intensityChanged();
+        _alpha = a;
+        // Sync to automation track initial value
+        auto* track = automationTrack(QStringLiteral("Color"));
+        if (track) track->setInitialValue(3, a);
+        emit alphaChanged();
         emitPropertyChanged();
     }
 }
@@ -86,6 +102,8 @@ void ColorTweak::setFilterRedMin(qreal value)
     if (!qFuzzyCompare(_filterRedMin, value))
     {
         _filterRedMin = value;
+        auto* track = automationTrack(QStringLiteral("Filter"));
+        if (track) track->setInitialValue(0, value);
         emit filterRedMinChanged();
         emitPropertyChanged();
     }
@@ -97,6 +115,8 @@ void ColorTweak::setFilterRedMax(qreal value)
     if (!qFuzzyCompare(_filterRedMax, value))
     {
         _filterRedMax = value;
+        auto* track = automationTrack(QStringLiteral("Filter"));
+        if (track) track->setInitialValue(1, value);
         emit filterRedMaxChanged();
         emitPropertyChanged();
     }
@@ -108,6 +128,8 @@ void ColorTweak::setFilterGreenMin(qreal value)
     if (!qFuzzyCompare(_filterGreenMin, value))
     {
         _filterGreenMin = value;
+        auto* track = automationTrack(QStringLiteral("Filter"));
+        if (track) track->setInitialValue(2, value);
         emit filterGreenMinChanged();
         emitPropertyChanged();
     }
@@ -119,6 +141,8 @@ void ColorTweak::setFilterGreenMax(qreal value)
     if (!qFuzzyCompare(_filterGreenMax, value))
     {
         _filterGreenMax = value;
+        auto* track = automationTrack(QStringLiteral("Filter"));
+        if (track) track->setInitialValue(3, value);
         emit filterGreenMaxChanged();
         emitPropertyChanged();
     }
@@ -130,6 +154,8 @@ void ColorTweak::setFilterBlueMin(qreal value)
     if (!qFuzzyCompare(_filterBlueMin, value))
     {
         _filterBlueMin = value;
+        auto* track = automationTrack(QStringLiteral("Filter"));
+        if (track) track->setInitialValue(4, value);
         emit filterBlueMinChanged();
         emitPropertyChanged();
     }
@@ -141,6 +167,8 @@ void ColorTweak::setFilterBlueMax(qreal value)
     if (!qFuzzyCompare(_filterBlueMax, value))
     {
         _filterBlueMax = value;
+        auto* track = automationTrack(QStringLiteral("Filter"));
+        if (track) track->setInitialValue(5, value);
         emit filterBlueMaxChanged();
         emitPropertyChanged();
     }
@@ -187,7 +215,12 @@ QColor ColorTweak::apply(const QColor& input, qreal ratio) const
         return input;  // No effect on colors outside the filter range
     }
 
-    qreal effectiveRatio = ratio * _intensity;
+    // GizmoTweak formula: lerp with alpha
+    // alpha = ratio * colorAlpha (range can be negative for inverse effect)
+    // beta = 1 - alpha
+    // out = beta * in + alpha * target
+    qreal effectiveAlpha = ratio * _alpha;
+    qreal beta = 1.0 - effectiveAlpha;
 
     qreal targetR = _color.redF();
     qreal targetG = _color.greenF();
@@ -197,36 +230,9 @@ QColor ColorTweak::apply(const QColor& input, qreal ratio) const
     qreal outG = inG;
     qreal outB = inB;
 
-    switch (_mode)
-    {
-    case Mode::Tint:
-        // Blend towards target color
-        if (_affectRed)   outR = inR + (targetR - inR) * effectiveRatio;
-        if (_affectGreen) outG = inG + (targetG - inG) * effectiveRatio;
-        if (_affectBlue)  outB = inB + (targetB - inB) * effectiveRatio;
-        break;
-
-    case Mode::Multiply:
-        // Multiply by target color
-        if (_affectRed)   outR = inR * (1.0 + (targetR - 1.0) * effectiveRatio);
-        if (_affectGreen) outG = inG * (1.0 + (targetG - 1.0) * effectiveRatio);
-        if (_affectBlue)  outB = inB * (1.0 + (targetB - 1.0) * effectiveRatio);
-        break;
-
-    case Mode::Add:
-        // Add target color
-        if (_affectRed)   outR = inR + targetR * effectiveRatio;
-        if (_affectGreen) outG = inG + targetG * effectiveRatio;
-        if (_affectBlue)  outB = inB + targetB * effectiveRatio;
-        break;
-
-    case Mode::Replace:
-        // Replace with target color
-        if (_affectRed)   outR = inR * (1.0 - effectiveRatio) + targetR * effectiveRatio;
-        if (_affectGreen) outG = inG * (1.0 - effectiveRatio) + targetG * effectiveRatio;
-        if (_affectBlue)  outB = inB * (1.0 - effectiveRatio) + targetB * effectiveRatio;
-        break;
-    }
+    if (_affectRed)   outR = beta * inR + effectiveAlpha * targetR;
+    if (_affectGreen) outG = beta * inG + effectiveAlpha * targetG;
+    if (_affectBlue)  outB = beta * inB + effectiveAlpha * targetB;
 
     // Clamp values
     outR = qBound(0.0, outR, 1.0);
@@ -239,9 +245,8 @@ QColor ColorTweak::apply(const QColor& input, qreal ratio) const
 QJsonObject ColorTweak::propertiesToJson() const
 {
     QJsonObject obj;
-    obj["mode"] = static_cast<int>(_mode);
     obj["color"] = _color.name(QColor::HexArgb);
-    obj["intensity"] = _intensity;
+    obj["alpha"] = _alpha;
     obj["affectRed"] = _affectRed;
     obj["affectGreen"] = _affectGreen;
     obj["affectBlue"] = _affectBlue;
@@ -257,15 +262,13 @@ QJsonObject ColorTweak::propertiesToJson() const
 
 void ColorTweak::propertiesFromJson(const QJsonObject& json)
 {
-    if (json.contains("mode"))
-    {
-        setMode(static_cast<Mode>(json["mode"].toInt()));
-    }
     if (json.contains("color"))
     {
         setColor(QColor(json["color"].toString()));
     }
-    if (json.contains("intensity")) setIntensity(json["intensity"].toDouble());
+    if (json.contains("alpha")) setAlpha(json["alpha"].toDouble());
+    // Backward compatibility with old "intensity" field
+    else if (json.contains("intensity")) setAlpha(json["intensity"].toDouble());
     if (json.contains("affectRed")) setAffectRed(json["affectRed"].toBool());
     if (json.contains("affectGreen")) setAffectGreen(json["affectGreen"].toBool());
     if (json.contains("affectBlue")) setAffectBlue(json["affectBlue"].toBool());
@@ -276,6 +279,31 @@ void ColorTweak::propertiesFromJson(const QJsonObject& json)
     if (json.contains("filterBlueMin")) setFilterBlueMin(json["filterBlueMin"].toDouble());
     if (json.contains("filterBlueMax")) setFilterBlueMax(json["filterBlueMax"].toDouble());
     if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
+}
+
+void ColorTweak::syncToAnimatedValues(int timeMs)
+{
+    // Only sync if automation is active for each track
+    auto* colorTrack = automationTrack(QStringLiteral("Color"));
+    if (colorTrack && colorTrack->isAutomated())
+    {
+        qreal r = colorTrack->timedValue(timeMs, 0);
+        qreal g = colorTrack->timedValue(timeMs, 1);
+        qreal b = colorTrack->timedValue(timeMs, 2);
+        _color = QColor::fromRgbF(r, g, b);
+        _alpha = colorTrack->timedValue(timeMs, 3);
+    }
+
+    auto* filterTrack = automationTrack(QStringLiteral("Filter"));
+    if (filterTrack && filterTrack->isAutomated())
+    {
+        _filterRedMin = filterTrack->timedValue(timeMs, 0);
+        _filterRedMax = filterTrack->timedValue(timeMs, 1);
+        _filterGreenMin = filterTrack->timedValue(timeMs, 2);
+        _filterGreenMax = filterTrack->timedValue(timeMs, 3);
+        _filterBlueMin = filterTrack->timedValue(timeMs, 4);
+        _filterBlueMax = filterTrack->timedValue(timeMs, 5);
+    }
 }
 
 } // namespace gizmotweak2

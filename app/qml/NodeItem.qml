@@ -34,12 +34,12 @@ Rectangle {
     // Check if this node needs a C++ preview (shapes, utilities, tweaks - but not Input/Output)
     readonly property bool needsCppPreview: nodeData && nodeData.type !== "Input" && nodeData.type !== "Output"
 
+    // Position is driven by nodeData.position via explicit sync (not binding,
+    // because drag.target breaks bindings). See onPositionChanged below.
     x: nodeData ? nodeData.position.x : 0
     y: nodeData ? nodeData.position.y : 0
-    // Width: preview (70) + icon (30) + margins (4+4+4) = 112 for nodes with icon
-    // IO nodes (Input/Output) stay at default width
-    width: (isInputNode || (nodeData && nodeData.type === "Output")) ? Theme.nodeMinWidth : 112
-    height: 78  // Preview size (70) + 4px top + 4px bottom
+    width: 112
+    height: 78
 
     radius: Theme.nodeRadius
 
@@ -113,20 +113,61 @@ Rectangle {
     }
 
     // Drag handling for the node itself (declared first so ports are on top)
+    // NOTE: We do NOT use drag.target because it breaks QML bindings on x/y.
+    // Instead we handle drag manually via mouse deltas → nodeData.position.
     MouseArea {
         id: dragArea
         anchors.fill: parent
-        drag.target: root
-        drag.threshold: 0
         hoverEnabled: true
+        preventStealing: true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         property bool isDragging: false
+        property bool isCtrlClick: false
+        // Mouse press position in canvas coordinates
+        property real pressMouseX: 0
+        property real pressMouseY: 0
+        // Start positions of all selected nodes (uuid → {x, y})
+        property var dragStartPositions: ({})
 
         onPressed: function(mouse) {
-            // Clear connection selection when clicking on a node
+            if (mouse.button === Qt.RightButton) {
+                // Right-click: if node not selected, select it alone first
+                if (nodeData && !nodeData.selected) {
+                    graph.clearSelection()
+                    nodeData.selected = true
+                    if (canvas) {
+                        canvas.selectedNode = nodeData
+                        canvas.selectionChanged()
+                    }
+                } else if (canvas) {
+                    var selCount = graph.selectedNodes().length
+                    canvas.selectedNode = (selCount === 1) ? nodeData : null
+                }
+                nodeContextMenu.popup()
+                return
+            }
+
+            // Left click: clear connection selection
             if (canvas) canvas.selectedConnection = null
 
-            if (!(mouse.modifiers & Qt.ControlModifier)) {
+            isCtrlClick = (mouse.modifiers & Qt.ControlModifier)
+
+            if (isCtrlClick) {
+                // Ctrl+Click: toggle selection
+                if (nodeData) {
+                    nodeData.selected = !nodeData.selected
+                    if (canvas) {
+                        var sc = graph.selectedNodes().length
+                        canvas.selectedNode = (sc === 1) ? graph.selectedNodes()[0] : null
+                        canvas.selectionChanged()
+                    }
+                }
+                return
+            }
+
+            // Plain click: clear and select
+            if (nodeData && !nodeData.selected) {
                 graph.clearSelection()
             }
             if (nodeData) {
@@ -136,47 +177,148 @@ Rectangle {
                     canvas.selectionChanged()
                     canvas.nodeClicked(nodeData)
                 }
-                // Track move start for undo
-                graph.beginMoveNode(nodeData.uuid)
+            }
+
+            // Store mouse position in parent (canvas) coordinates
+            var posInParent = mapToItem(root.parent, mouse.x, mouse.y)
+            pressMouseX = posInParent.x
+            pressMouseY = posInParent.y
+
+            // Store start positions for multi-drag
+            dragStartPositions = {}
+            var selected = graph.selectedNodes()
+            for (var i = 0; i < selected.length; i++) {
+                var n = selected[i]
+                dragStartPositions[n.uuid] = Qt.point(n.position.x, n.position.y)
+                graph.beginMoveNode(n.uuid)
             }
         }
 
-        onPositionChanged: {
-            if (drag.active) {
-                isDragging = true
-                if (nodeData) nodeData.position = Qt.point(root.x, root.y)
+        onPositionChanged: function(mouse) {
+            if (!pressed || isCtrlClick || mouse.button === Qt.RightButton) return
+
+            isDragging = true
+            var posInParent = mapToItem(root.parent, mouse.x, mouse.y)
+            var dx = posInParent.x - pressMouseX
+            var dy = posInParent.y - pressMouseY
+
+            // Apply snap for the primary node
+            if (nodeData && canvas && typeof canvas.snapToConnectionAlignment === 'function') {
+                var startSelf = dragStartPositions[nodeData.uuid]
+                if (startSelf) {
+                    var desiredPos = Qt.point(startSelf.x + dx, startSelf.y + dy)
+                    var snapped = canvas.snapToConnectionAlignment(nodeData, desiredPos, root.width, root.height)
+                    dx = snapped.x - startSelf.x
+                    dy = snapped.y - startSelf.y
+                }
+            }
+
+            // Move all selected nodes by delta (sets nodeData.position → bindings update x/y)
+            for (var uuid in dragStartPositions) {
+                var startPos = dragStartPositions[uuid]
+                var node = graph.nodeByUuid(uuid)
+                if (node) {
+                    node.position = Qt.point(startPos.x + dx, startPos.y + dy)
+                }
             }
         }
 
-        onReleased: {
-            if (nodeData) {
-                var desiredPos = Qt.point(root.x, root.y)
+        onReleased: function(mouse) {
+            if (mouse.button === Qt.RightButton) return
 
-                // Use canvas collision detection if available
-                if (canvas && typeof canvas.findValidPosition === 'function') {
-                    var validPos = canvas.findValidPosition(nodeData.uuid, desiredPos, root.width, root.height)
-                    nodeData.position = validPos
-                } else {
-                    // Fallback: just snap to grid
-                    var gridSize = 20
-                    nodeData.position = Qt.point(
-                        Math.round(root.x / gridSize) * gridSize,
-                        Math.round(root.y / gridSize) * gridSize
-                    )
+            if (isDragging) {
+                // Finalize positions for all selected nodes
+                for (var uuid in dragStartPositions) {
+                    var node = graph.nodeByUuid(uuid)
+                    if (node) {
+                        graph.endMoveNode(uuid, node.position)
+                    }
                 }
-
-                // Track move end for undo (only if we actually dragged)
-                if (isDragging) {
-                    graph.endMoveNode(nodeData.uuid, nodeData.position)
-                    isDragging = false
-                }
+                isDragging = false
             }
+            dragStartPositions = {}
+            isCtrlClick = false
         }
 
         onEntered: root.isHovering = true
         onExited: root.isHovering = false
 
-        onDoubleClicked: root.doubleClicked()
+        onDoubleClicked: {
+            root.doubleClicked()
+            if (nodeData && canvas) {
+                canvas.nodeDoubleClicked(nodeData)
+            }
+        }
+    }
+
+    // Selection count (updated when context menu opens)
+    property int _selCount: 0
+
+    // Node context menu (right-click)
+    Menu {
+        id: nodeContextMenu
+        delegate: StyledMenuItem {}
+
+        background: Rectangle {
+            implicitWidth: 180
+            color: Theme.surface
+            border.color: Theme.border
+            radius: 2
+        }
+
+        onAboutToShow: {
+            root._selCount = graph.selectedNodes().length
+        }
+
+        // Multi-selection items (only visible when 2+ nodes selected)
+        Menu {
+            title: qsTr("Align")
+            enabled: root._selCount > 1
+            visible: root._selCount > 1
+            delegate: StyledMenuItem {}
+
+            background: Rectangle {
+                implicitWidth: 160
+                color: Theme.surface
+                border.color: Theme.border
+                radius: 2
+            }
+
+            Action { text: qsTr("Left"); onTriggered: canvas.alignNodes("left") }
+            Action { text: qsTr("Center"); onTriggered: canvas.alignNodes("center") }
+            Action { text: qsTr("Right"); onTriggered: canvas.alignNodes("right") }
+            MenuSeparator {}
+            Action { text: qsTr("Top"); onTriggered: canvas.alignNodes("top") }
+            Action { text: qsTr("Middle"); onTriggered: canvas.alignNodes("middle") }
+            Action { text: qsTr("Bottom"); onTriggered: canvas.alignNodes("bottom") }
+        }
+
+        Menu {
+            title: qsTr("Distribute")
+            enabled: root._selCount > 2
+            visible: root._selCount > 2
+            delegate: StyledMenuItem {}
+
+            background: Rectangle {
+                implicitWidth: 160
+                color: Theme.surface
+                border.color: Theme.border
+                radius: 2
+            }
+
+            Action { text: qsTr("Horizontally"); onTriggered: canvas.distributeNodes("horizontal") }
+            Action { text: qsTr("Vertically"); onTriggered: canvas.distributeNodes("vertical") }
+        }
+
+        MenuSeparator {
+            visible: root._selCount > 1
+        }
+
+        Action {
+            text: qsTr("Delete")
+            enabled: nodeData && nodeData.type !== "Input" && nodeData.type !== "Output"
+            onTriggered: canvas.confirmDeleteSelected()
+        }
     }
 
     // Icon for Output node (target/bullseye)
@@ -537,6 +679,22 @@ Rectangle {
                 break
             }
         }
+    }
+
+    // Node name watermark
+    Label {
+        text: nodeData ? nodeData.displayName : ""
+        color: Qt.rgba(root.baseColor.r, root.baseColor.g, root.baseColor.b, 0.5)
+        font.pixelSize: 12
+        visible: nodeData !== null
+
+        // Tweaks: to the right; others: below
+        anchors.left: isTweak ? root.right : undefined
+        anchors.leftMargin: isTweak ? 4 : 0
+        anchors.verticalCenter: isTweak ? root.verticalCenter : undefined
+        anchors.top: isTweak ? undefined : root.bottom
+        anchors.topMargin: isTweak ? 0 : 2
+        anchors.horizontalCenter: isTweak ? undefined : root.horizontalCenter
     }
 
     // TOP PORTS (for Output node input, and Tweak frame input)

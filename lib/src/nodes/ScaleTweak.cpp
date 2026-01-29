@@ -15,6 +15,15 @@ ScaleTweak::ScaleTweak(QObject* parent)
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
+
+    // Automation: Scale track with scaleX (0) and scaleY (1)
+    auto* scaleTrack = createAutomationTrack(QStringLiteral("Scale"), 2, QColor(60, 179, 113));
+    scaleTrack->setupParameter(0, 0.01, 5.0, _scaleX, tr("Scale X"), 100.0, QStringLiteral("%"));
+    scaleTrack->setupParameter(1, 0.01, 5.0, _scaleY, tr("Scale Y"), 100.0, QStringLiteral("%"));
+
+    auto* centerTrack = createAutomationTrack(QStringLiteral("Center"), 2, QColor(186, 85, 211));
+    centerTrack->setupParameter(0, -1.0, 1.0, _centerX, tr("Center X"), 100.0, QStringLiteral("%"));
+    centerTrack->setupParameter(1, -1.0, 1.0, _centerY, tr("Center Y"), 100.0, QStringLiteral("%"));
 }
 
 void ScaleTweak::setScaleX(qreal sx)
@@ -22,11 +31,15 @@ void ScaleTweak::setScaleX(qreal sx)
     if (!qFuzzyCompare(_scaleX, sx))
     {
         _scaleX = sx;
+        // Sync to automation track initial value
+        auto* track = automationTrack(QStringLiteral("Scale"));
+        if (track) track->setInitialValue(0, sx);
         emit scaleXChanged();
 
         if (_uniform)
         {
             _scaleY = sx;
+            if (track) track->setInitialValue(1, sx);
             emit scaleYChanged();
         }
         emitPropertyChanged();
@@ -38,11 +51,15 @@ void ScaleTweak::setScaleY(qreal sy)
     if (!qFuzzyCompare(_scaleY, sy))
     {
         _scaleY = sy;
+        // Sync to automation track initial value
+        auto* track = automationTrack(QStringLiteral("Scale"));
+        if (track) track->setInitialValue(1, sy);
         emit scaleYChanged();
 
         if (_uniform)
         {
             _scaleX = sy;
+            if (track) track->setInitialValue(0, sy);
             emit scaleXChanged();
         }
         emitPropertyChanged();
@@ -70,6 +87,9 @@ void ScaleTweak::setCenterX(qreal cx)
     if (!qFuzzyCompare(_centerX, cx))
     {
         _centerX = cx;
+        // Sync to automation track initial value
+        auto* track = automationTrack(QStringLiteral("Center"));
+        if (track) track->setInitialValue(0, cx);
         emit centerXChanged();
         emitPropertyChanged();
     }
@@ -80,6 +100,9 @@ void ScaleTweak::setCenterY(qreal cy)
     if (!qFuzzyCompare(_centerY, cy))
     {
         _centerY = cy;
+        // Sync to automation track initial value
+        auto* track = automationTrack(QStringLiteral("Center"));
+        if (track) track->setInitialValue(1, cy);
         emit centerYChanged();
         emitPropertyChanged();
     }
@@ -176,6 +199,24 @@ void ScaleTweak::propertiesFromJson(const QJsonObject& json)
     if (json.contains("centerY")) setCenterY(json["centerY"].toDouble());
     if (json.contains("crossOver")) setCrossOver(json["crossOver"].toBool());
     if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
+}
+
+void ScaleTweak::syncToAnimatedValues(int timeMs)
+{
+    // Only sync if automation is active for each track
+    auto* scaleTrack = automationTrack(QStringLiteral("Scale"));
+    if (scaleTrack && scaleTrack->isAutomated())
+    {
+        _scaleX = scaleTrack->timedValue(timeMs, 0);
+        _scaleY = scaleTrack->timedValue(timeMs, 1);
+    }
+
+    auto* centerTrack = automationTrack(QStringLiteral("Center"));
+    if (centerTrack && centerTrack->isAutomated())
+    {
+        _centerX = centerTrack->timedValue(timeMs, 0);
+        _centerY = centerTrack->timedValue(timeMs, 1);
+    }
 }
 
 } // namespace gizmotweak2

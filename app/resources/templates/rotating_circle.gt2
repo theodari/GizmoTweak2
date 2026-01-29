@@ -1,0 +1,62 @@
+{
+    "version": 1,
+    "nodes": [
+        {
+            "uuid": "input-001",
+            "type": "Input",
+            "displayName": "Input",
+            "position": { "x": 100, "y": 150 },
+            "properties": {
+                "patternIndex": 0,
+                "bpm": 120,
+                "beatsPerMeasure": 4,
+                "measures": 2
+            }
+        },
+        {
+            "uuid": "scale-001",
+            "type": "ScaleTweak",
+            "displayName": "Scale",
+            "position": { "x": 100, "y": 260 },
+            "properties": {
+                "scaleX": 50,
+                "scaleY": 50
+            }
+        },
+        {
+            "uuid": "rotation-001",
+            "type": "RotationTweak",
+            "displayName": "Rotation",
+            "position": { "x": 100, "y": 370 },
+            "properties": {
+                "angle": 0
+            }
+        },
+        {
+            "uuid": "output-001",
+            "type": "Output",
+            "displayName": "Output",
+            "position": { "x": 100, "y": 480 }
+        }
+    ],
+    "connections": [
+        {
+            "sourceNode": "input-001",
+            "sourcePort": "Frame",
+            "targetNode": "scale-001",
+            "targetPort": "Frame In"
+        },
+        {
+            "sourceNode": "scale-001",
+            "sourcePort": "Frame Out",
+            "targetNode": "rotation-001",
+            "targetPort": "Frame In"
+        },
+        {
+            "sourceNode": "rotation-001",
+            "sourcePort": "Frame Out",
+            "targetNode": "output-001",
+            "targetPort": "Frame"
+        }
+    ]
+}

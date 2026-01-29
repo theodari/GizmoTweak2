@@ -17,6 +17,14 @@ PolarTweak::PolarTweak(QObject* parent)
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
+
+    // Automation: Expansion track with expansion (0), ringRadius (1) - matches GizmoTweak v1
+    auto* expansionTrack = createAutomationTrack(QStringLiteral("Expansion"), 2, QColor(255, 127, 80));
+    expansionTrack->setupParameter(0, -2.0, 2.0, _expansion, tr("Expansion"), 100.0, QStringLiteral("%"));
+    expansionTrack->setupParameter(1, 0.01, 2.0, _ringRadius, tr("Radius"), 100.0, QStringLiteral("%"));
+
+    auto* ringScaleTrack = createAutomationTrack(QStringLiteral("RingScale"), 1, QColor(138, 43, 226));
+    ringScaleTrack->setupParameter(0, -1.0, 1.0, _ringScale, tr("Ring Scale"), 100.0, QStringLiteral("%"));
 }
 
 void PolarTweak::setExpansion(qreal e)
@@ -24,6 +32,8 @@ void PolarTweak::setExpansion(qreal e)
     if (!qFuzzyCompare(_expansion, e))
     {
         _expansion = e;
+        auto* track = automationTrack(QStringLiteral("Expansion"));
+        if (track) track->setInitialValue(0, e);
         emit expansionChanged();
         emitPropertyChanged();
     }
@@ -35,6 +45,8 @@ void PolarTweak::setRingRadius(qreal r)
     if (!qFuzzyCompare(_ringRadius, r))
     {
         _ringRadius = r;
+        auto* track = automationTrack(QStringLiteral("Expansion"));
+        if (track) track->setInitialValue(1, r);
         emit ringRadiusChanged();
         emitPropertyChanged();
     }
@@ -45,6 +57,8 @@ void PolarTweak::setRingScale(qreal s)
     if (!qFuzzyCompare(_ringScale, s))
     {
         _ringScale = s;
+        auto* track = automationTrack(QStringLiteral("RingScale"));
+        if (track) track->setInitialValue(0, s);
         emit ringScaleChanged();
         emitPropertyChanged();
     }
@@ -205,6 +219,24 @@ void PolarTweak::propertiesFromJson(const QJsonObject& json)
     if (json.contains("crossOver")) setCrossOver(json["crossOver"].toBool());
     if (json.contains("targetted")) setTargetted(json["targetted"].toBool());
     if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
+}
+
+void PolarTweak::syncToAnimatedValues(int timeMs)
+{
+    // Only sync if automation is active for each track
+    // Matches GizmoTweak v1: Expansion track (expansion, radius) + RingScale track (scale)
+    auto* expansionTrack = automationTrack(QStringLiteral("Expansion"));
+    if (expansionTrack && expansionTrack->isAutomated())
+    {
+        _expansion = expansionTrack->timedValue(timeMs, 0);
+        _ringRadius = expansionTrack->timedValue(timeMs, 1);
+    }
+
+    auto* ringScaleTrack = automationTrack(QStringLiteral("RingScale"));
+    if (ringScaleTrack && ringScaleTrack->isAutomated())
+    {
+        _ringScale = ringScaleTrack->timedValue(timeMs, 0);
+    }
 }
 
 } // namespace gizmotweak2

@@ -68,12 +68,12 @@ public:
     Q_INVOKABLE int outputCount() const { return _outputs.size(); }
 
     // Serialization - override in derived classes to save/load specific properties
-    virtual QJsonObject propertiesToJson() const { return QJsonObject(); }
-    virtual void propertiesFromJson(const QJsonObject& json) { Q_UNUSED(json) }
+    Q_INVOKABLE virtual QJsonObject propertiesToJson() const { return QJsonObject(); }
+    Q_INVOKABLE virtual void propertiesFromJson(const QJsonObject& json) { Q_UNUSED(json) }
 
     // Automation serialization
     QJsonArray automationToJson() const;
-    void automationFromJson(const QJsonArray& json);
+    virtual void automationFromJson(const QJsonArray& json);
 
     // Automation support
     QList<AutomationTrack*> automationTracks() const { return _automationTracks; }
@@ -84,6 +84,10 @@ public:
 
     // Get automated value at time (returns initial value if not automated)
     Q_INVOKABLE double automatedValue(const QString& trackName, int paramIndex, int timeMs) const;
+
+    // Sync properties to animated values at given time
+    // Override in derived classes to apply automation to specific properties
+    virtual void syncToAnimatedValues(int timeMs) { Q_UNUSED(timeMs) }
 
 signals:
     void displayNameChanged();

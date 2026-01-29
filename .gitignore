@@ -90,3 +90,6 @@ CMakeLists.txt.user
 
 # Claude Code local settings
 .claude/settings.local.json
+.bmad-core
+.claude
+tmpclaude-*-cwd

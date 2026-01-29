@@ -6,20 +6,44 @@ namespace gizmotweak2
 {
 
 ExcaliburEngine::ExcaliburEngine(QObject* parent)
-    : LaserEngine(parent)
+    : QObject(parent)
 {
-    // TODO: Initialize Excalibur SDK here
-    qDebug() << "ExcaliburEngine created";
+    // Setup reconnect timer
+    _reconnectTimer.setSingleShot(true);
+    QObject::connect(&_reconnectTimer, &QTimer::timeout, this, &ExcaliburEngine::reconnect);
 }
 
 ExcaliburEngine::~ExcaliburEngine()
 {
+    _reconnectTimer.stop();
     disconnect();
 }
 
 bool ExcaliburEngine::isConnected() const
 {
     return _connected;
+}
+
+void ExcaliburEngine::setConnectionStatus(ConnectionStatus status)
+{
+    if (_connectionStatus != status)
+    {
+        _connectionStatus = status;
+        emit connectionStatusChanged();
+    }
+}
+
+void ExcaliburEngine::setLastError(const QString& error)
+{
+    if (_lastError != error)
+    {
+        _lastError = error;
+        emit lastErrorChanged();
+        if (!error.isEmpty())
+        {
+            emit errorOccurred(error);
+        }
+    }
 }
 
 bool ExcaliburEngine::connect()
@@ -29,33 +53,65 @@ bool ExcaliburEngine::connect()
         return true;
     }
 
-    qDebug() << "ExcaliburEngine: Connecting...";
-
+    setConnectionStatus(ConnectionStatus::Connecting);
+    setLastError(QString());
     // TODO: Actual Excalibur SDK connection
-    // For now, simulate connection with dummy zones
-    _connected = true;
-    discoverZones();
+    // For now, simulate successful connection with dummy zones
+    bool success = true;
 
-    emit connectedChanged();
-    return true;
+    if (success)
+    {
+        _connected = true;
+        _reconnectAttempts = 0;
+        discoverZones();
+        setConnectionStatus(ConnectionStatus::Connected);
+        emit connectedChanged();
+        return true;
+    }
+    else
+    {
+        setConnectionStatus(ConnectionStatus::Error);
+        setLastError(tr("Failed to connect to Excalibur device"));
+
+        // Schedule automatic reconnection
+        if (_reconnectAttempts < MaxReconnectAttempts)
+        {
+            _reconnectAttempts++;
+            _reconnectTimer.start(2000);  // Retry in 2 seconds
+        }
+        return false;
+    }
 }
 
 void ExcaliburEngine::disconnect()
 {
+    _reconnectTimer.stop();
+    _reconnectAttempts = 0;
+
     if (!_connected)
     {
         return;
     }
-
-    qDebug() << "ExcaliburEngine: Disconnecting...";
 
     // TODO: Actual Excalibur SDK disconnection
     _connected = false;
     _zones.clear();
     _laserEnabled.clear();
 
+    setConnectionStatus(ConnectionStatus::Disconnected);
+    setLastError(QString());
     emit connectedChanged();
     emit zonesChanged();
+}
+
+void ExcaliburEngine::reconnect()
+{
+    if (_connected)
+    {
+        return;
+    }
+
+    connect();
 }
 
 void ExcaliburEngine::discoverZones()
@@ -90,21 +146,45 @@ int ExcaliburEngine::zoneCount() const
 
 bool ExcaliburEngine::sendFrame(int zoneIndex, const QVariantList& points)
 {
-    if (!_connected || zoneIndex < 0 || zoneIndex >= _zones.size())
+    // Validate connection
+    if (!_connected)
+    {
+        // Don't spam errors, just return false
+        return false;
+    }
+
+    // Validate zone index
+    if (zoneIndex < 0 || zoneIndex >= _zones.size())
+    {
+        qWarning() << "ExcaliburEngine::sendFrame: Invalid zone index" << zoneIndex;
+        return false;
+    }
+
+    // Check if laser is enabled for this zone
+    if (!_laserEnabled.at(zoneIndex))
     {
         return false;
     }
 
-    if (!_laserEnabled.at(zoneIndex))
+    // Validate points
+    if (points.isEmpty())
     {
-        return false;
+        return true;  // Empty frame is valid, just nothing to display
     }
 
     // TODO: Convert points to Excalibur format and send
     // Points format: [{x, y, r, g, b}, ...]
     // x, y in [-1, +1], r, g, b in [0, 1]
 
-    Q_UNUSED(points)
+    // Simulate frame sending - in real implementation this would call Excalibur API
+    // bool success = excaliburSendFrame(zoneIndex, convertedPoints);
+    bool success = true;
+
+    if (!success)
+    {
+        setLastError(tr("Failed to send frame to zone %1").arg(zoneIndex + 1));
+        return false;
+    }
 
     return true;
 }
@@ -113,13 +193,19 @@ void ExcaliburEngine::setLaserEnabled(int zoneIndex, bool enabled)
 {
     if (zoneIndex < 0 || zoneIndex >= _laserEnabled.size())
     {
+        qWarning() << "ExcaliburEngine::setLaserEnabled: Invalid zone index" << zoneIndex;
         return;
     }
 
     if (_laserEnabled.at(zoneIndex) != enabled)
     {
         _laserEnabled[zoneIndex] = enabled;
-        qDebug() << "ExcaliburEngine: Zone" << zoneIndex << "laser" << (enabled ? "ON" : "OFF");
+
+        // If disabling, ensure we send a blank frame to stop output
+        if (!enabled && _connected)
+        {
+            // TODO: Send blank frame to zone
+        }
     }
 }
 

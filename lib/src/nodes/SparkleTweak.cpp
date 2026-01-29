@@ -18,6 +18,15 @@ SparkleTweak::SparkleTweak(QObject* parent)
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
+
+    // Automation: Sparkle track with density (0), red (1), green (2), blue (3), alpha (4)
+    // Matches GizmoTweak v1: single track with all 5 parameters
+    auto* sparkleTrack = createAutomationTrack(QStringLiteral("Sparkle"), 5, QColor(255, 215, 0));
+    sparkleTrack->setupParameter(0, 0.0, 1.0, _density, tr("Density"), 100.0, QStringLiteral("%"));
+    sparkleTrack->setupParameter(1, 0.0, 1.0, _red, tr("Red"), 100.0, QStringLiteral("%"));
+    sparkleTrack->setupParameter(2, 0.0, 1.0, _green, tr("Green"), 100.0, QStringLiteral("%"));
+    sparkleTrack->setupParameter(3, 0.0, 1.0, _blue, tr("Blue"), 100.0, QStringLiteral("%"));
+    sparkleTrack->setupParameter(4, 0.0, 1.0, _alpha, tr("Alpha"), 100.0, QStringLiteral("%"));
 }
 
 void SparkleTweak::setDensity(qreal d)
@@ -26,6 +35,8 @@ void SparkleTweak::setDensity(qreal d)
     if (!qFuzzyCompare(_density, d))
     {
         _density = d;
+        auto* track = automationTrack(QStringLiteral("Sparkle"));
+        if (track) track->setInitialValue(0, d);
         emit densityChanged();
         emitPropertyChanged();
     }
@@ -37,6 +48,8 @@ void SparkleTweak::setRed(qreal r)
     if (!qFuzzyCompare(_red, r))
     {
         _red = r;
+        auto* track = automationTrack(QStringLiteral("Sparkle"));
+        if (track) track->setInitialValue(1, r);
         emit redChanged();
         emitPropertyChanged();
     }
@@ -48,6 +61,8 @@ void SparkleTweak::setGreen(qreal g)
     if (!qFuzzyCompare(_green, g))
     {
         _green = g;
+        auto* track = automationTrack(QStringLiteral("Sparkle"));
+        if (track) track->setInitialValue(2, g);
         emit greenChanged();
         emitPropertyChanged();
     }
@@ -59,6 +74,8 @@ void SparkleTweak::setBlue(qreal b)
     if (!qFuzzyCompare(_blue, b))
     {
         _blue = b;
+        auto* track = automationTrack(QStringLiteral("Sparkle"));
+        if (track) track->setInitialValue(3, b);
         emit blueChanged();
         emitPropertyChanged();
     }
@@ -70,6 +87,8 @@ void SparkleTweak::setAlpha(qreal a)
     if (!qFuzzyCompare(_alpha, a))
     {
         _alpha = a;
+        auto* track = automationTrack(QStringLiteral("Sparkle"));
+        if (track) track->setInitialValue(4, a);
         emit alphaChanged();
         emitPropertyChanged();
     }
@@ -378,6 +397,21 @@ void SparkleTweak::propertiesFromJson(const QJsonObject& json)
     if (json.contains("blue")) setBlue(json["blue"].toDouble());
     if (json.contains("alpha")) setAlpha(json["alpha"].toDouble());
     if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
+}
+
+void SparkleTweak::syncToAnimatedValues(int timeMs)
+{
+    // Only sync if automation is active
+    // Matches GizmoTweak v1: single Sparkle track with density, R, G, B, alpha
+    auto* sparkleTrack = automationTrack(QStringLiteral("Sparkle"));
+    if (sparkleTrack && sparkleTrack->isAutomated())
+    {
+        _density = sparkleTrack->timedValue(timeMs, 0);
+        _red = sparkleTrack->timedValue(timeMs, 1);
+        _green = sparkleTrack->timedValue(timeMs, 2);
+        _blue = sparkleTrack->timedValue(timeMs, 3);
+        _alpha = sparkleTrack->timedValue(timeMs, 4);
+    }
 }
 
 } // namespace gizmotweak2

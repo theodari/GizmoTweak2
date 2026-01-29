@@ -17,6 +17,16 @@ RounderTweak::RounderTweak(QObject* parent)
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
+
+    // Automation: Rounder track with amount (0), verticalShift (1), horizontalShift (2),
+    // tighten (3), radialResize (4), radialShift (5)
+    auto* rounderTrack = createAutomationTrack(QStringLiteral("Rounder"), 6, QColor(64, 224, 208));  // Turquoise
+    rounderTrack->setupParameter(0, -2.0, 2.0, _amount, tr("Amount"), 100.0, QStringLiteral("%"));
+    rounderTrack->setupParameter(1, -2.0, 2.0, _verticalShift, tr("V Shift"), 100.0, QStringLiteral("%"));
+    rounderTrack->setupParameter(2, -2.0, 2.0, _horizontalShift, tr("H Shift"), 100.0, QStringLiteral("%"));
+    rounderTrack->setupParameter(3, 0.0, 1.0, _tighten, tr("Tighten"), 100.0, QStringLiteral("%"));
+    rounderTrack->setupParameter(4, 0.5, 2.0, _radialResize, tr("Radial Resize"), 100.0, QStringLiteral("%"));
+    rounderTrack->setupParameter(5, -2.0, 2.0, _radialShift, tr("Radial Shift"), 100.0, QStringLiteral("%"));
 }
 
 void RounderTweak::setAmount(qreal value)
@@ -25,6 +35,8 @@ void RounderTweak::setAmount(qreal value)
     if (!qFuzzyCompare(_amount, value))
     {
         _amount = value;
+        auto* track = automationTrack(QStringLiteral("Rounder"));
+        if (track) track->setInitialValue(0, value);
         emit amountChanged();
         emitPropertyChanged();
     }
@@ -36,6 +48,8 @@ void RounderTweak::setVerticalShift(qreal value)
     if (!qFuzzyCompare(_verticalShift, value))
     {
         _verticalShift = value;
+        auto* track = automationTrack(QStringLiteral("Rounder"));
+        if (track) track->setInitialValue(1, value);
         emit verticalShiftChanged();
         emitPropertyChanged();
     }
@@ -47,6 +61,8 @@ void RounderTweak::setHorizontalShift(qreal value)
     if (!qFuzzyCompare(_horizontalShift, value))
     {
         _horizontalShift = value;
+        auto* track = automationTrack(QStringLiteral("Rounder"));
+        if (track) track->setInitialValue(2, value);
         emit horizontalShiftChanged();
         emitPropertyChanged();
     }
@@ -58,6 +74,8 @@ void RounderTweak::setTighten(qreal value)
     if (!qFuzzyCompare(_tighten, value))
     {
         _tighten = value;
+        auto* track = automationTrack(QStringLiteral("Rounder"));
+        if (track) track->setInitialValue(3, value);
         emit tightenChanged();
         emitPropertyChanged();
     }
@@ -69,6 +87,8 @@ void RounderTweak::setRadialResize(qreal value)
     if (!qFuzzyCompare(_radialResize, value))
     {
         _radialResize = value;
+        auto* track = automationTrack(QStringLiteral("Rounder"));
+        if (track) track->setInitialValue(4, value);
         emit radialResizeChanged();
         emitPropertyChanged();
     }
@@ -80,6 +100,8 @@ void RounderTweak::setRadialShift(qreal value)
     if (!qFuzzyCompare(_radialShift, value))
     {
         _radialShift = value;
+        auto* track = automationTrack(QStringLiteral("Rounder"));
+        if (track) track->setInitialValue(5, value);
         emit radialShiftChanged();
         emitPropertyChanged();
     }
@@ -168,6 +190,21 @@ void RounderTweak::propertiesFromJson(const QJsonObject& json)
     if (json.contains("radialResize")) setRadialResize(json["radialResize"].toDouble());
     if (json.contains("radialShift")) setRadialShift(json["radialShift"].toDouble());
     if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
+}
+
+void RounderTweak::syncToAnimatedValues(int timeMs)
+{
+    // Only sync if automation is active
+    auto* rounderTrack = automationTrack(QStringLiteral("Rounder"));
+    if (rounderTrack && rounderTrack->isAutomated())
+    {
+        _amount = rounderTrack->timedValue(timeMs, 0);
+        _verticalShift = rounderTrack->timedValue(timeMs, 1);
+        _horizontalShift = rounderTrack->timedValue(timeMs, 2);
+        _tighten = rounderTrack->timedValue(timeMs, 3);
+        _radialResize = rounderTrack->timedValue(timeMs, 4);
+        _radialShift = rounderTrack->timedValue(timeMs, 5);
+    }
 }
 
 } // namespace gizmotweak2

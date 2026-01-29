@@ -134,6 +134,10 @@ qreal GraphEvaluator::evaluateRatioChain(Port* ratioPort, qreal x, qreal y, qrea
     Node* sourceNode = getConnectedNode(ratioPort);
     if (!sourceNode) return 1.0;  // No connection = full ratio
 
+    // Sync automation for this node (Gizmos, etc. not in frame path)
+    int timeMs = static_cast<int>(time * 1000.0);
+    sourceNode->syncToAnimatedValues(timeMs);
+
     QString nodeType = sourceNode->type();
 
     // Handle Gizmo
@@ -444,6 +448,15 @@ xengine::Frame* GraphEvaluator::evaluate(xengine::Frame* input, qreal time)
 
     xengine::Frame* tempFrame = new xengine::Frame();
 
+    // Calculate time in milliseconds for automation
+    int timeMs = static_cast<int>(time * 1000.0);
+
+    // Sync ALL nodes to their animated values first (not just Tweaks)
+    for (auto* node : path)
+    {
+        node->syncToAnimatedValues(timeMs);
+    }
+
     // Apply tweaks in order
     for (auto* node : path)
     {
@@ -568,6 +581,148 @@ xengine::Frame* GraphEvaluator::evaluate(xengine::Frame* input, qreal time)
     return currentFrame;
 }
 
+xengine::Frame* GraphEvaluator::evaluateUpTo(xengine::Frame* input, Node* stopNode, qreal time)
+{
+    if (!input || !_graph || !stopNode) return nullptr;
+
+    // Build the path from Input to Output
+    QList<Node*> path = buildFramePath();
+
+    // Check stopNode is in the path
+    if (!path.contains(stopNode)) return nullptr;
+
+    // Use double-buffered frames for frame-level tweaks
+    auto* currentFrame = new xengine::Frame();
+    currentFrame->clone(*input);
+
+    auto* tempFrame = new xengine::Frame();
+
+    // Calculate time in milliseconds for automation
+    int timeMs = static_cast<int>(time * 1000.0);
+
+    // Sync ALL nodes to their animated values first
+    for (auto* node : path)
+    {
+        node->syncToAnimatedValues(timeMs);
+    }
+
+    // Apply tweaks in order, stop after stopNode
+    for (auto* node : path)
+    {
+        if (node->category() != Node::Category::Tweak)
+        {
+            if (node == stopNode) break;
+            continue;
+        }
+
+        QString nodeType = node->type();
+
+        // Check if this is a frame-level tweak
+        if (nodeType == QStringLiteral("SparkleTweak"))
+        {
+            auto* sparkleTweak = qobject_cast<SparkleTweak*>(node);
+            if (sparkleTweak)
+            {
+                QVariant followGizmoProp = node->property("followGizmo");
+                bool followGizmo = followGizmoProp.isValid() ? followGizmoProp.toBool() : false;
+
+                tempFrame->clear();
+
+                if (followGizmo)
+                {
+                    Port* ratioPort = nullptr;
+                    for (auto* port : node->inputs())
+                    {
+                        if (port->dataType() == Port::DataType::RatioAny ||
+                            port->dataType() == Port::DataType::Ratio2D ||
+                            port->dataType() == Port::DataType::Ratio1D)
+                        {
+                            ratioPort = port;
+                            break;
+                        }
+                    }
+
+                    if (ratioPort && ratioPort->isConnected())
+                    {
+                        auto ratioEvaluator = [this, ratioPort, time](qreal x, qreal y) {
+                            return evaluateRatioChain(ratioPort, x, y, time);
+                        };
+                        sparkleTweak->applyToFrame(currentFrame, tempFrame, ratioEvaluator);
+                    }
+                    else
+                    {
+                        if (node == stopNode) break;
+                        continue;
+                    }
+                }
+                else
+                {
+                    sparkleTweak->applyToFrame(currentFrame, tempFrame, 1.0);
+                }
+
+                std::swap(currentFrame, tempFrame);
+            }
+
+            if (node == stopNode) break;
+            continue;
+        }
+
+        // Per-sample tweaks
+        tempFrame->clear();
+
+        Port* ratioPort = nullptr;
+        for (auto* port : node->inputs())
+        {
+            if (port->dataType() == Port::DataType::RatioAny ||
+                port->dataType() == Port::DataType::Ratio2D ||
+                port->dataType() == Port::DataType::Ratio1D)
+            {
+                ratioPort = port;
+                break;
+            }
+        }
+
+        QVariant followGizmoProp = node->property("followGizmo");
+        bool followGizmo = followGizmoProp.isValid() ? followGizmoProp.toBool() : false;
+
+        if (followGizmo && (!ratioPort || !ratioPort->isConnected()))
+        {
+            if (node == stopNode) break;
+            continue;
+        }
+
+        for (int i = 0; i < currentFrame->size(); ++i)
+        {
+            xengine::XSample sample = currentFrame->at(i);
+            Point point{sample.getX(), sample.getY(), sample.getR(), sample.getG(), sample.getB()};
+
+            qreal ratio = 1.0;
+            if (followGizmo && ratioPort && ratioPort->isConnected())
+            {
+                ratio = evaluateRatioChain(ratioPort, point.x, point.y, time);
+            }
+
+            qreal gizmoX = 0.0, gizmoY = 0.0;
+            if (followGizmo)
+            {
+                QPointF gizmoCenter = findConnectedGizmoCenter(ratioPort);
+                gizmoX = gizmoCenter.x();
+                gizmoY = gizmoCenter.y();
+            }
+
+            point = applyTweak(node, point, ratio, time, i, gizmoX, gizmoY);
+            tempFrame->addSample(point.x, point.y, 0.0, point.r, point.g, point.b, sample.getNb());
+        }
+
+        std::swap(currentFrame, tempFrame);
+
+        if (node == stopNode) break;
+    }
+
+    delete tempFrame;
+    return currentFrame;
+}
+
 QVariantList GraphEvaluator::evaluateToPoints(const QVariantList& inputPoints, qreal time)
 {
     QVariantList result;
@@ -646,6 +801,91 @@ bool GraphEvaluator::isGraphComplete() const
         if (!hasFrameInput)
         {
             _validationErrors << QStringLiteral("Output node has no Frame input");
+        }
+    }
+
+    // Build the frame path to check for valid chain
+    QList<Node*> framePath;
+    if (inputNode)
+    {
+        Node* current = inputNode;
+        framePath.append(current);
+
+        while (current)
+        {
+            Port* frameOutput = nullptr;
+            for (auto* port : current->outputs())
+            {
+                if (port->dataType() == Port::DataType::Frame)
+                {
+                    frameOutput = port;
+                    break;
+                }
+            }
+
+            if (!frameOutput) break;
+
+            Node* next = getConnectedNode(frameOutput);
+            if (!next) break;
+
+            // Check for cycle
+            if (framePath.contains(next))
+            {
+                _validationErrors << QStringLiteral("Cycle detected in frame path at node: %1").arg(next->displayName());
+                break;
+            }
+
+            framePath.append(next);
+            current = next;
+        }
+    }
+
+    // Check for orphan tweaks (not in the frame path)
+    for (int i = 0; i < _graph->nodeCount(); ++i)
+    {
+        auto* node = _graph->nodeAt(i);
+        if (!node) continue;
+
+        if (node->category() == Node::Category::Tweak)
+        {
+            if (!framePath.contains(node))
+            {
+                // Check if it has any connections at all
+                bool hasFrameInput = false;
+                bool hasFrameOutput = false;
+
+                for (auto* port : node->inputs())
+                {
+                    if (port->dataType() == Port::DataType::Frame && port->isConnected())
+                    {
+                        hasFrameInput = true;
+                        break;
+                    }
+                }
+
+                for (auto* port : node->outputs())
+                {
+                    if (port->dataType() == Port::DataType::Frame && port->isConnected())
+                    {
+                        hasFrameOutput = true;
+                        break;
+                    }
+                }
+
+                if (hasFrameInput || hasFrameOutput)
+                {
+                    // Partially connected - this is an error
+                    if (!hasFrameInput)
+                    {
+                        _validationErrors << QStringLiteral("%1: Frame input not connected").arg(node->displayName());
+                    }
+                    if (!hasFrameOutput)
+                    {
+                        _validationErrors << QStringLiteral("%1: Frame output not connected").arg(node->displayName());
+                    }
+                }
+                // If no connections at all, it's just floating - not an error, just unused
+            }
         }
     }
 

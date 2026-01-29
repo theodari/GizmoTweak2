@@ -46,7 +46,12 @@ qt_add_qml_module(${APP_NAME}
         qml/TrackItem.qml
         qml/GearButton.qml
         qml/ParameterRow.qml
+        qml/ParameterGroup.qml
+        qml/KeyframeParameterRow.qml
+        qml/ReadOnlyParameterRow.qml
         qml/CurveIconButton.qml
+        qml/Toast.qml
+        qml/KeyboardShortcutsDialog.qml
     SOURCES
         src/FileIO.h
         src/FileIO.cpp
@@ -56,9 +61,21 @@ qt_add_qml_module(${APP_NAME}
         src/FramePreviewItem.cpp
         src/RecentFilesManager.h
         src/RecentFilesManager.cpp
+        src/PatternImageProvider.h
+        src/PatternImageProvider.cpp
         ${ENGINE_SOURCES}
     RESOURCES
         resources/gizmoTweakPatterns.ild
+        resources/templates/basic_chain.gt2
+        resources/templates/rotating_circle.gt2
+        resources/templates/wave_effect.gt2
+        resources/templates/multi_gizmo.gt2
+        resources/templates/mirror_effect.gt2
+        resources/icons/gizmo_rectangle.png
+        resources/icons/gizmo_ellipse.png
+        resources/icons/gizmo_angle.png
+        resources/icons/gizmo_linear_waves.png
+        resources/icons/gizmo_circular_waves.png
 )
 
 target_include_directories(${APP_NAME}

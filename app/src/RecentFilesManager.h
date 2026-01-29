@@ -49,5 +49,5 @@ private:
 
     QStringList _recentFiles;
     bool _reloadLastFileOnStartup{true};
-    int _maxRecentFiles{10};
+    int _maxRecentFiles{20};
 };

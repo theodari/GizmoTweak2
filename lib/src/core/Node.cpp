@@ -144,6 +144,22 @@ AutomationTrack* Node::createAutomationTrack(const QString& trackName, int param
 
     auto* track = new AutomationTrack(paramCount, trackName, color, this);
     _automationTracks.append(track);
+
+    // Connect track automation changes to node property changes
+    // This ensures the timeline updates when automation is toggled
+    QObject::connect(track, &AutomationTrack::automatedChanged, this, [this]() {
+        emit propertyChanged();
+    });
+    QObject::connect(track, &AutomationTrack::keyFrameCountChanged, this, [this]() {
+        emit propertyChanged();
+    });
+    QObject::connect(track, &AutomationTrack::keyFrameModified, this, [this](int) {
+        emit propertyChanged();
+    });
+
+    // Connect node displayName changes to track nodeNameChanged for watermark updates
+    QObject::connect(this, &Node::displayNameChanged, track, &AutomationTrack::nodeNameChanged);
+
     emit automationTracksChanged();
     return track;
 }
@@ -189,29 +205,45 @@ QJsonArray Node::automationToJson() const
 
 void Node::automationFromJson(const QJsonArray& json)
 {
-    // Clear existing tracks
-    for (auto* track : _automationTracks)
-    {
-        track->deleteLater();
-    }
-    _automationTracks.clear();
-
-    // Load tracks from JSON
+    // Update existing tracks from JSON (preserves parameter metadata from constructor's setupParameter)
     for (const auto& trackVal : json)
     {
         auto trackObj = trackVal.toObject();
-        int paramCount = trackObj["paramCount"].toInt();
         auto trackName = trackObj["trackName"].toString();
-        auto color = QColor(trackObj["color"].toString());
 
-        auto* track = new AutomationTrack(paramCount, trackName, color, this);
-        if (track->fromJson(trackObj))
+        // Find existing track by name
+        auto* existingTrack = automationTrack(trackName);
+        if (existingTrack)
         {
-            _automationTracks.append(track);
+            // Update only keyframes and automated flag, preserve parameter metadata
+            existingTrack->keyframesFromJson(trackObj);
         }
         else
         {
-            delete track;
+            // Track doesn't exist in constructor - create new one (legacy compatibility)
+            int paramCount = trackObj["paramCount"].toInt();
+            auto color = QColor(trackObj["color"].toString());
+
+            auto* track = new AutomationTrack(paramCount, trackName, color, this);
+            if (track->fromJson(trackObj))
+            {
+                _automationTracks.append(track);
+
+                QObject::connect(track, &AutomationTrack::automatedChanged, this, [this]() {
+                    emit propertyChanged();
+                });
+                QObject::connect(track, &AutomationTrack::keyFrameCountChanged, this, [this]() {
+                    emit propertyChanged();
+                });
+                QObject::connect(track, &AutomationTrack::keyFrameModified, this, [this](int) {
+                    emit propertyChanged();
+                });
+                QObject::connect(this, &Node::displayNameChanged, track, &AutomationTrack::nodeNameChanged);
+            }
+            else
+            {
+                delete track;
+            }
         }
     }
 

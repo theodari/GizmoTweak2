@@ -19,6 +19,18 @@ GroupNode::GroupNode(QObject* parent)
 
     // Output - outputs any ratio type
     addOutput(QStringLiteral("ratio"), Port::DataType::RatioAny);
+
+    // Automation: Position track with positionX (0) and positionY (1)
+    auto* positionTrack = createAutomationTrack(QStringLiteral("Position"), 2, QColor(70, 130, 180));
+    positionTrack->setupParameter(0, -2.0, 2.0, _positionX, tr("Position X"), 100.0, QStringLiteral("%"));
+    positionTrack->setupParameter(1, -2.0, 2.0, _positionY, tr("Position Y"), 100.0, QStringLiteral("%"));
+
+    auto* scaleTrack = createAutomationTrack(QStringLiteral("Scale"), 2, QColor(60, 179, 113));
+    scaleTrack->setupParameter(0, 0.01, 10.0, _scaleX, tr("Scale X"), 100.0, QStringLiteral("%"));
+    scaleTrack->setupParameter(1, 0.01, 10.0, _scaleY, tr("Scale Y"), 100.0, QStringLiteral("%"));
+
+    auto* rotationTrack = createAutomationTrack(QStringLiteral("Rotation"), 1, QColor(255, 140, 0));
+    rotationTrack->setupParameter(0, -360.0, 360.0, _rotation, tr("Rotation"), 1.0, QStringLiteral("\u00B0"));
 }
 
 void GroupNode::setCompositionMode(CompositionMode mode)
@@ -307,6 +319,15 @@ void GroupNode::propertiesFromJson(const QJsonObject& json)
     {
         setRotation(json["rotation"].toDouble());
     }
+}
+
+void GroupNode::syncToAnimatedValues(int timeMs)
+{
+    setPositionX(automatedValue(QStringLiteral("Position"), 0, timeMs));
+    setPositionY(automatedValue(QStringLiteral("Position"), 1, timeMs));
+    setScaleX(automatedValue(QStringLiteral("Scale"), 0, timeMs));
+    setScaleY(automatedValue(QStringLiteral("Scale"), 1, timeMs));
+    setRotation(automatedValue(QStringLiteral("Rotation"), 0, timeMs));
 }
 
 } // namespace gizmotweak2

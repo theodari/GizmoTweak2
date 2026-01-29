@@ -13,6 +13,8 @@
 namespace gizmotweak2
 {
 
+class Node;  // Forward declaration
+
 class AutomationTrack : public QObject
 {
     Q_OBJECT
@@ -24,6 +26,8 @@ class AutomationTrack : public QObject
     Q_PROPERTY(int paramCount READ paramCount CONSTANT)
     Q_PROPERTY(int keyFrameCount READ keyFrameCount NOTIFY keyFrameCountChanged)
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
+    Q_PROPERTY(QString nodeType READ nodeType CONSTANT)
+    Q_PROPERTY(QString nodeName READ nodeName NOTIFY nodeNameChanged)
 
 public:
     explicit AutomationTrack(int nbParams, const QString& trackName,
@@ -37,6 +41,7 @@ public:
 
     QJsonObject toJson() const;
     bool fromJson(const QJsonObject& json);
+    void keyframesFromJson(const QJsonObject& json);  // Load only keyframes, preserve parameter metadata
 
     // Parameter setup
     Q_INVOKABLE void setupParameter(int paramIndex, double minValue, double maxValue,
@@ -55,6 +60,10 @@ public:
 
     int paramCount() const { return _nbParams; }
     int keyFrameCount() const { return _keyFrames.count(); }
+
+    // Parent node info (for watermark display)
+    QString nodeType() const;
+    QString nodeName() const;
 
     // Parameter info
     Q_INVOKABLE double minValue(int index) const;
@@ -78,6 +87,8 @@ public:
     // Keyframe access
     const QMap<int, KeyFrame*>& keyFrames() const { return _keyFrames; }
     Q_INVOKABLE QList<int> keyFrameTimes() const { return _keyFrames.keys(); }
+    Q_INVOKABLE int keyFrameCurveType(int timeMs) const;
+    Q_INVOKABLE void setKeyFrameCurveType(int timeMs, int curveType);
 
     // Resize/trim operations
     void resizeAllKeyFrames(double factor);
@@ -93,6 +104,7 @@ signals:
     void colorChanged();
     void keyFrameCountChanged();
     void keyFrameModified(int timeMs);
+    void nodeNameChanged();
 
 private:
     int _nbParams;

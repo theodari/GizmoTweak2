@@ -32,6 +32,9 @@ public:
     // Evaluate the graph and return the resulting Frame
     Q_INVOKABLE xengine::Frame* evaluate(xengine::Frame* input, qreal time = 0.0);
 
+    // Evaluate the graph up to (and including) a specific node, then stop
+    xengine::Frame* evaluateUpTo(xengine::Frame* input, Node* stopNode, qreal time = 0.0);
+
     // Evaluate and return points as QVariantList for QML (array of {x, y, r, g, b})
     Q_INVOKABLE QVariantList evaluateToPoints(const QVariantList& inputPoints, qreal time = 0.0);
 

@@ -60,6 +60,9 @@ public:
     QJsonObject propertiesToJson() const override;
     void propertiesFromJson(const QJsonObject& json) override;
 
+    // Automation sync
+    void syncToAnimatedValues(int timeMs) override;
+
 signals:
     void scaleXChanged();
     void scaleYChanged();

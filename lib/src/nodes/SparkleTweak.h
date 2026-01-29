@@ -98,6 +98,9 @@ public:
     QJsonObject propertiesToJson() const override;
     void propertiesFromJson(const QJsonObject& json) override;
 
+    // Automation
+    void syncToAnimatedValues(int timeMs) override;
+
 signals:
     void densityChanged();
     void redChanged();

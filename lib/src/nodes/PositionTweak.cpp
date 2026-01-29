@@ -17,6 +17,11 @@ PositionTweak::PositionTweak(QObject* parent)
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
+
+    // Automation: Position track with offsetX (0) and offsetY (1)
+    auto* track = createAutomationTrack(QStringLiteral("Position"), 2, QColor(70, 130, 180));
+    track->setupParameter(0, -2.0, 2.0, _offsetX, tr("X"), 100.0, QStringLiteral("%"));
+    track->setupParameter(1, -2.0, 2.0, _offsetY, tr("Y"), 100.0, QStringLiteral("%"));
 }
 
 void PositionTweak::setOffsetX(qreal x)
@@ -24,6 +29,9 @@ void PositionTweak::setOffsetX(qreal x)
     if (!qFuzzyCompare(_offsetX, x))
     {
         _offsetX = x;
+        // Sync to automation track initial value
+        auto* track = automationTrack(QStringLiteral("Position"));
+        if (track) track->setInitialValue(0, x);
         emit offsetXChanged();
         emitPropertyChanged();
     }
@@ -34,6 +42,9 @@ void PositionTweak::setOffsetY(qreal y)
     if (!qFuzzyCompare(_offsetY, y))
     {
         _offsetY = y;
+        // Sync to automation track initial value
+        auto* track = automationTrack(QStringLiteral("Position"));
+        if (track) track->setInitialValue(1, y);
         emit offsetYChanged();
         emitPropertyChanged();
     }
@@ -80,6 +91,17 @@ void PositionTweak::propertiesFromJson(const QJsonObject& json)
     if (json.contains("offsetX")) setOffsetX(json["offsetX"].toDouble());
     if (json.contains("offsetY")) setOffsetY(json["offsetY"].toDouble());
     if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
+}
+
+void PositionTweak::syncToAnimatedValues(int timeMs)
+{
+    // Only sync if automation is active
+    auto* track = automationTrack(QStringLiteral("Position"));
+    if (track && track->isAutomated())
+    {
+        _offsetX = track->timedValue(timeMs, 0);
+        _offsetY = track->timedValue(timeMs, 1);
+    }
 }
 
 } // namespace gizmotweak2

@@ -18,6 +18,15 @@ SqueezeTweak::SqueezeTweak(QObject* parent)
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
+
+    // Automation: Squeeze track with intensity (0) and angle (1)
+    auto* squeezeTrack = createAutomationTrack(QStringLiteral("Squeeze"), 2, QColor(210, 105, 30));
+    squeezeTrack->setupParameter(0, -2.0, 2.0, _intensity, tr("Intensity"), 100.0, QStringLiteral("%"));
+    squeezeTrack->setupParameter(1, 0.0, 360.0, _angle, tr("Angle"), 1.0, QStringLiteral("\u00B0"));
+
+    auto* centerTrack = createAutomationTrack(QStringLiteral("Center"), 2, QColor(186, 85, 211));
+    centerTrack->setupParameter(0, -1.0, 1.0, _centerX, tr("Center X"), 100.0, QStringLiteral("%"));
+    centerTrack->setupParameter(1, -1.0, 1.0, _centerY, tr("Center Y"), 100.0, QStringLiteral("%"));
 }
 
 void SqueezeTweak::setIntensity(qreal i)
@@ -26,6 +35,8 @@ void SqueezeTweak::setIntensity(qreal i)
     if (!qFuzzyCompare(_intensity, i))
     {
         _intensity = i;
+        auto* track = automationTrack(QStringLiteral("Squeeze"));
+        if (track) track->setInitialValue(0, i);
         emit intensityChanged();
         emitPropertyChanged();
     }
@@ -39,6 +50,8 @@ void SqueezeTweak::setAngle(qreal a)
     if (!qFuzzyCompare(_angle, a))
     {
         _angle = a;
+        auto* track = automationTrack(QStringLiteral("Squeeze"));
+        if (track) track->setInitialValue(1, a);
         emit angleChanged();
         emitPropertyChanged();
     }
@@ -49,6 +62,8 @@ void SqueezeTweak::setCenterX(qreal cx)
     if (!qFuzzyCompare(_centerX, cx))
     {
         _centerX = cx;
+        auto* track = automationTrack(QStringLiteral("Center"));
+        if (track) track->setInitialValue(0, cx);
         emit centerXChanged();
         emitPropertyChanged();
     }
@@ -59,6 +74,8 @@ void SqueezeTweak::setCenterY(qreal cy)
     if (!qFuzzyCompare(_centerY, cy))
     {
         _centerY = cy;
+        auto* track = automationTrack(QStringLiteral("Center"));
+        if (track) track->setInitialValue(1, cy);
         emit centerYChanged();
         emitPropertyChanged();
     }
@@ -162,6 +179,24 @@ void SqueezeTweak::propertiesFromJson(const QJsonObject& json)
     if (json.contains("centerX")) setCenterX(json["centerX"].toDouble());
     if (json.contains("centerY")) setCenterY(json["centerY"].toDouble());
     if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
+}
+
+void SqueezeTweak::syncToAnimatedValues(int timeMs)
+{
+    // Only sync if automation is active for each track
+    auto* squeezeTrack = automationTrack(QStringLiteral("Squeeze"));
+    if (squeezeTrack && squeezeTrack->isAutomated())
+    {
+        _intensity = squeezeTrack->timedValue(timeMs, 0);
+        _angle = squeezeTrack->timedValue(timeMs, 1);
+    }
+
+    auto* centerTrack = automationTrack(QStringLiteral("Center"));
+    if (centerTrack && centerTrack->isAutomated())
+    {
+        _centerX = centerTrack->timedValue(timeMs, 0);
+        _centerY = centerTrack->timedValue(timeMs, 1);
+    }
 }
 
 } // namespace gizmotweak2

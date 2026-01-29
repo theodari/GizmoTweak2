@@ -17,6 +17,17 @@ WaveTweak::WaveTweak(QObject* parent)
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
+
+    // Automation: Wave track with amplitude (0), wavelength (1), phase (2), angle (3)
+    auto* waveTrack = createAutomationTrack(QStringLiteral("Wave"), 4, QColor(30, 144, 255));
+    waveTrack->setupParameter(0, 0.0, 2.0, _amplitude, tr("Amplitude"), 100.0, QStringLiteral("%"));
+    waveTrack->setupParameter(1, 0.01, 2.0, _wavelength, tr("Wavelength"), 100.0, QStringLiteral("%"));
+    waveTrack->setupParameter(2, 0.0, 360.0, _phase, tr("Phase"), 1.0, QStringLiteral("\u00B0"));
+    waveTrack->setupParameter(3, 0.0, 360.0, _angle, tr("Angle"), 1.0, QStringLiteral("\u00B0"));
+
+    auto* centerTrack = createAutomationTrack(QStringLiteral("Center"), 2, QColor(186, 85, 211));
+    centerTrack->setupParameter(0, -1.0, 1.0, _centerX, tr("Center X"), 100.0, QStringLiteral("%"));
+    centerTrack->setupParameter(1, -1.0, 1.0, _centerY, tr("Center Y"), 100.0, QStringLiteral("%"));
 }
 
 void WaveTweak::setAmplitude(qreal a)
@@ -25,6 +36,8 @@ void WaveTweak::setAmplitude(qreal a)
     if (!qFuzzyCompare(_amplitude, a))
     {
         _amplitude = a;
+        auto* track = automationTrack(QStringLiteral("Wave"));
+        if (track) track->setInitialValue(0, a);
         emit amplitudeChanged();
         emitPropertyChanged();
     }
@@ -36,6 +49,8 @@ void WaveTweak::setWavelength(qreal wl)
     if (!qFuzzyCompare(_wavelength, wl))
     {
         _wavelength = wl;
+        auto* track = automationTrack(QStringLiteral("Wave"));
+        if (track) track->setInitialValue(1, wl);
         emit wavelengthChanged();
         emitPropertyChanged();
     }
@@ -49,6 +64,8 @@ void WaveTweak::setPhase(qreal p)
     if (!qFuzzyCompare(_phase, p))
     {
         _phase = p;
+        auto* track = automationTrack(QStringLiteral("Wave"));
+        if (track) track->setInitialValue(2, p);
         emit phaseChanged();
         emitPropertyChanged();
     }
@@ -62,6 +79,8 @@ void WaveTweak::setAngle(qreal a)
     if (!qFuzzyCompare(_angle, a))
     {
         _angle = a;
+        auto* track = automationTrack(QStringLiteral("Wave"));
+        if (track) track->setInitialValue(3, a);
         emit angleChanged();
         emitPropertyChanged();
     }
@@ -82,6 +101,8 @@ void WaveTweak::setCenterX(qreal cx)
     if (!qFuzzyCompare(_centerX, cx))
     {
         _centerX = cx;
+        auto* track = automationTrack(QStringLiteral("Center"));
+        if (track) track->setInitialValue(0, cx);
         emit centerXChanged();
         emitPropertyChanged();
     }
@@ -92,6 +113,8 @@ void WaveTweak::setCenterY(qreal cy)
     if (!qFuzzyCompare(_centerY, cy))
     {
         _centerY = cy;
+        auto* track = automationTrack(QStringLiteral("Center"));
+        if (track) track->setInitialValue(1, cy);
         emit centerYChanged();
         emitPropertyChanged();
     }
@@ -207,6 +230,26 @@ void WaveTweak::propertiesFromJson(const QJsonObject& json)
     if (json.contains("centerX")) setCenterX(json["centerX"].toDouble());
     if (json.contains("centerY")) setCenterY(json["centerY"].toDouble());
     if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
+}
+
+void WaveTweak::syncToAnimatedValues(int timeMs)
+{
+    // Only sync if automation is active for each track
+    auto* waveTrack = automationTrack(QStringLiteral("Wave"));
+    if (waveTrack && waveTrack->isAutomated())
+    {
+        _amplitude = waveTrack->timedValue(timeMs, 0);
+        _wavelength = waveTrack->timedValue(timeMs, 1);
+        _phase = waveTrack->timedValue(timeMs, 2);
+        _angle = waveTrack->timedValue(timeMs, 3);
+    }
+
+    auto* centerTrack = automationTrack(QStringLiteral("Center"));
+    if (centerTrack && centerTrack->isAutomated())
+    {
+        _centerX = centerTrack->timedValue(timeMs, 0);
+        _centerY = centerTrack->timedValue(timeMs, 1);
+    }
 }
 
 } // namespace gizmotweak2

@@ -88,3 +88,31 @@ target_link_libraries(tst_commands
 )
 
 add_test(NAME CommandsTests COMMAND tst_commands)
+
+# Test Automation (KeyFrame, AutomationTrack)
+add_executable(tst_automation
+    tst_automation.cpp
+)
+
+target_link_libraries(tst_automation
+    PRIVATE
+        GizmoTweakLib2
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Test
+)
+
+add_test(NAME AutomationTests COMMAND tst_automation)
+
+# Test Zoom (zoom-to-cursor math)
+add_executable(tst_zoom
+    tst_zoom.cpp
+)
+
+target_link_libraries(tst_zoom
+    PRIVATE
+        Qt6::Core
+        Qt6::Test
+)
+
+add_test(NAME ZoomTests COMMAND tst_zoom)

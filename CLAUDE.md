@@ -79,3 +79,18 @@ See `doc/ARCHITECTURE.md` for complete details.
 - Qt 6.x (Core, Gui, Quick, QuickControls2, Shapes, Test)
 - MSVC 2019/2022
 - CMake 3.16+
+
+
+## BMad Method
+
+Ce projet utilise le BMad Method pour la planification et le développement agile assisté par IA.
+
+### Commandes BMad disponibles
+- `/bmad-orchestrator` - Orchestrateur principal BMad
+- `/analyst` - Analyse et recherche
+- `/architect` - Architecture logicielle
+- `/pm` - Product Manager
+- `/dev` - Développeur
+- `/qa` - Assurance qualité
+
+Voir `.bmad-core/user-guide.md` pour la documentation complète.

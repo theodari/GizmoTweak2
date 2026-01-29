@@ -1,0 +1,73 @@
+{
+    "version": 1,
+    "nodes": [
+        {
+            "uuid": "gizmo-001",
+            "type": "Gizmo",
+            "displayName": "Circle 1",
+            "position": { "x": 100, "y": 100 },
+            "properties": {
+                "shape": 0,
+                "pointCount": 64
+            }
+        },
+        {
+            "uuid": "gizmo-002",
+            "type": "Gizmo",
+            "displayName": "Circle 2",
+            "position": { "x": 300, "y": 100 },
+            "properties": {
+                "shape": 0,
+                "pointCount": 64
+            }
+        },
+        {
+            "uuid": "transform-001",
+            "type": "Transform",
+            "displayName": "Group",
+            "position": { "x": 200, "y": 250 },
+            "properties": {}
+        },
+        {
+            "uuid": "rotation-001",
+            "type": "RotationTweak",
+            "displayName": "Rotation",
+            "position": { "x": 200, "y": 370 },
+            "properties": {
+                "angle": 0
+            }
+        },
+        {
+            "uuid": "output-001",
+            "type": "Output",
+            "displayName": "Output",
+            "position": { "x": 200, "y": 490 }
+        }
+    ],
+    "connections": [
+        {
+            "sourceNode": "gizmo-001",
+            "sourcePort": "Frame",
+            "targetNode": "transform-001",
+            "targetPort": "Frame A"
+        },
+        {
+            "sourceNode": "gizmo-002",
+            "sourcePort": "Frame",
+            "targetNode": "transform-001",
+            "targetPort": "Frame B"
+        },
+        {
+            "sourceNode": "transform-001",
+            "sourcePort": "Frame",
+            "targetNode": "rotation-001",
+            "targetPort": "Frame In"
+        },
+        {
+            "sourceNode": "rotation-001",
+            "sourcePort": "Frame Out",
+            "targetNode": "output-001",
+            "targetPort": "Frame"
+        }
+    ]
+}

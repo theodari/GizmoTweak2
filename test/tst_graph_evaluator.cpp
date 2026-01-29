@@ -294,7 +294,7 @@ void TestGraphEvaluator::testRatioFromGizmo()
     gizmoNode->setCenterY(0.0);
     gizmoNode->setHorizontalBorder(0.5);
     gizmoNode->setVerticalBorder(0.5);
-    gizmoNode->setFalloff(0.0);
+
 
     // Configure PositionTweak
     auto* posTweakNode = qobject_cast<PositionTweak*>(posTweak);
@@ -340,7 +340,7 @@ void TestGraphEvaluator::testRatioFromGizmoOutside()
     gizmoNode->setCenterY(0.0);
     gizmoNode->setHorizontalBorder(0.2);
     gizmoNode->setVerticalBorder(0.2);
-    gizmoNode->setFalloff(0.0);
+
 
     // Configure PositionTweak
     auto* posTweakNode = qobject_cast<PositionTweak*>(posTweak);
@@ -666,9 +666,8 @@ void TestGraphEvaluator::testEvaluateColorTweak()
         if (node->type() == "ColorTweak")
         {
             auto* tweak = qobject_cast<ColorTweak*>(node);
-            tweak->setMode(ColorTweak::Mode::Replace);
             tweak->setColor(QColor(255, 0, 0));  // Red
-            tweak->setIntensity(1.0);
+            tweak->setAlpha(1.0);
             tweak->setFollowGizmo(false);
             break;
         }
@@ -755,7 +754,7 @@ void TestGraphEvaluator::testPositionTweakWithGizmo()
     gizmoNode->setCenterY(0.0);
     gizmoNode->setHorizontalBorder(0.5);
     gizmoNode->setVerticalBorder(0.5);
-    gizmoNode->setFalloff(0.0);
+
 
     // Configure PositionTweak
     auto* posTweakNode = qobject_cast<PositionTweak*>(posTweak);
@@ -803,7 +802,7 @@ void TestGraphEvaluator::testScaleTweakWithGizmoCenter()
     gizmoNode->setCenterY(0.5);
     gizmoNode->setHorizontalBorder(0.3);
     gizmoNode->setVerticalBorder(0.3);
-    gizmoNode->setFalloff(0.0);
+
 
     // Configure ScaleTweak with followGizmo
     auto* scaleTweakNode = qobject_cast<ScaleTweak*>(scaleTweak);
@@ -1146,9 +1145,8 @@ void TestGraphEvaluator::testColorTweakFollowGizmoNoRatio()
         if (node->type() == "ColorTweak")
         {
             auto* tweak = qobject_cast<ColorTweak*>(node);
-            tweak->setMode(ColorTweak::Mode::Replace);
             tweak->setColor(QColor(255, 0, 0));  // Replace with red
-            tweak->setIntensity(1.0);
+            tweak->setAlpha(1.0);
             tweak->setFollowGizmo(true);  // Enabled but no ratio connected!
             break;
         }

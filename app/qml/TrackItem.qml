@@ -14,12 +14,20 @@ Rectangle {
     property int measureCount: 2
     property int selectedKeyFrameMs: -1
     property bool isCurrentTrack: false
+    property bool snapEnabled: false  // Hold Shift to enable snap to beat grid
 
     signal keyFrameSelected(int timeMs)
     signal keyFrameCreated(int timeMs)
     signal keyFrameMoved(int oldTimeMs, int newTimeMs)
+    signal keyFrameDeleted(int timeMs)
     signal scrollLocatorChanged(int timeMs)
     signal playLocatorChanged(int timeMs)
+    signal locatorDragStarted()
+    signal locatorDragEnded()
+    signal keyFrameDoubleClicked(int timeMs)
+    signal backgroundClicked()
+    signal keyFrameCopied(var keyFrameData)
+    signal keyFramePasteRequested(int timeMs)
 
     height: 28
     color: mouseArea.containsMouse ? Qt.rgba(0, 0, 0, 0) : Qt.rgba(0, 0, 0, 0.36)
@@ -32,12 +40,25 @@ Rectangle {
     readonly property color dimSeparation: "#9F9F9F"
     readonly property color brightPlayLocator: "#FF0000"
     readonly property color dimPlayLocator: "#7F0000"
+
+    // Get color for node type (same as NodeToolbar)
+    function colorForNodeType(nodeType) {
+        switch (nodeType) {
+            case "Gizmo": return Theme.nodeGizmo
+            case "Transform": return Theme.nodeTransform
+            case "SurfaceFactory": return Theme.nodeSurface
+            case "Mirror":
+            case "TimeShift": return Theme.nodeUtility
+            default: return Theme.nodeTweak  // All tweaks
+        }
+    }
     readonly property color brightScrollLocator: "#0000FF"
     readonly property color dimScrollLocator: "#00007F"
     readonly property color measureLine: "#7FA0A0"
     readonly property color beatLine: "#7F7F7F"
     readonly property color selectedKeyFrame: "#FFFFFF"
-    readonly property color unselectedKeyFrame: "#00FFFF"
+    // Keyframe color matches node type color
+    readonly property color unselectedKeyFrame: root.track ? colorForNodeType(root.track.nodeType) : "#00FFFF"
 
     function timeToX(timeMs) {
         return (timeMs / animationDurationMs) * width
@@ -45,6 +66,15 @@ Rectangle {
 
     function xToTime(x) {
         return Math.round((x / width) * animationDurationMs)
+    }
+
+    // Snap time to nearest beat grid position
+    function snapToGrid(timeMs) {
+        if (!snapEnabled) return timeMs
+        var totalBeats = measureCount * beatsPerMeasure
+        var beatDurationMs = animationDurationMs / totalBeats
+        var nearestBeat = Math.round(timeMs / beatDurationMs)
+        return Math.round(nearestBeat * beatDurationMs)
     }
 
     Canvas {
@@ -97,7 +127,25 @@ Rectangle {
                 ctx.setLineDash([])
             }
 
-            // Draw keyframes
+            // Scroll locator (blue line) - drawn below keyframes
+            var scrollX = root.timeToX(root.scrollLocatorMs)
+            ctx.strokeStyle = scrollLocatorColor
+            ctx.lineWidth = bright ? 1.5 : 1.0
+            ctx.beginPath()
+            ctx.moveTo(scrollX, 0)
+            ctx.lineTo(scrollX, height - 1)
+            ctx.stroke()
+
+            // Play locator (red line) - drawn below keyframes
+            var playX = root.timeToX(root.playLocatorMs)
+            ctx.strokeStyle = playLocatorColor
+            ctx.lineWidth = bright ? 1.5 : 1.0
+            ctx.beginPath()
+            ctx.moveTo(playX, 0)
+            ctx.lineTo(playX, height - 1)
+            ctx.stroke()
+
+            // Draw keyframes (on top of locators)
             if (root.track) {
                 var times = root.track.keyFrameTimes()
                 var trackHalfHeight = (height - 1) / 2
@@ -127,31 +175,15 @@ Rectangle {
                         ctx.fillStyle = Qt.rgba(1, 1, 1, 0.5)
                         ctx.strokeStyle = root.selectedKeyFrame
                     } else {
-                        ctx.fillStyle = Qt.rgba(0, 1, 1, 0.5)
+                        // Use node type color with 50% alpha for fill
+                        var kfColor = root.unselectedKeyFrame
+                        ctx.fillStyle = Qt.rgba(kfColor.r, kfColor.g, kfColor.b, 0.5)
                         ctx.strokeStyle = root.unselectedKeyFrame
                     }
                     ctx.fill()
                     ctx.stroke()
                 }
             }
-
-            // Scroll locator (blue line)
-            var scrollX = root.timeToX(root.scrollLocatorMs)
-            ctx.strokeStyle = scrollLocatorColor
-            ctx.lineWidth = bright ? 1.5 : 1.0
-            ctx.beginPath()
-            ctx.moveTo(scrollX, 0)
-            ctx.lineTo(scrollX, height - 1)
-            ctx.stroke()
-
-            // Play locator (red line)
-            var playX = root.timeToX(root.playLocatorMs)
-            ctx.strokeStyle = playLocatorColor
-            ctx.lineWidth = bright ? 1.5 : 1.0
-            ctx.beginPath()
-            ctx.moveTo(playX, 0)
-            ctx.lineTo(playX, height - 1)
-            ctx.stroke()
         }
     }
 
@@ -173,22 +205,49 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton
+        preventStealing: true  // Keep mouse capture during drag
 
         property bool draggingKeyFrame: false
         property int dragStartTimeMs: -1
+        property bool isDragging: false
 
         onDoubleClicked: function(mouse) {
-            var timeMs = root.xToTime(mouse.x)
-            if (root.track && !root.track.hasKeyFrameAt(timeMs)) {
-                root.track.createKeyFrame(timeMs)
-                root.selectedKeyFrameMs = timeMs
-                root.keyFrameCreated(timeMs)
+            root.snapEnabled = (mouse.modifiers & Qt.ShiftModifier)
+            var timeMs = root.snapToGrid(root.xToTime(mouse.x))
+            if (root.track) {
+                if (root.track.hasKeyFrameAt(timeMs)) {
+                    root.keyFrameSelected(timeMs)
+                    root.keyFrameDoubleClicked(timeMs)
+                } else {
+                    // Check if near an existing keyframe
+                    var times = root.track.keyFrameTimes()
+                    var closestTime = -1
+                    var minDist = 9999
+                    for (var i = 0; i < times.length; i++) {
+                        var kfX = root.timeToX(times[i])
+                        var dist = Math.abs(kfX - mouse.x)
+                        if (dist < root.handleHalfWidth && dist < minDist) {
+                            minDist = dist
+                            closestTime = times[i]
+                        }
+                    }
+                    if (closestTime >= 0) {
+                        root.keyFrameSelected(closestTime)
+                        root.keyFrameDoubleClicked(closestTime)
+                    } else {
+                        // Create new keyframe and select it
+                        root.track.createKeyFrame(timeMs)
+                        root.keyFrameCreated(timeMs)
+                        root.keyFrameSelected(timeMs)
+                    }
+                }
             }
         }
 
         onPressed: function(mouse) {
             var clickTimeMs = root.xToTime(mouse.x)
             var foundKeyFrame = false
+            var locatorTimeMs = clickTimeMs  // Default to mouse position
 
             // Check if clicking on a keyframe
             if (root.track) {
@@ -207,28 +266,35 @@ Rectangle {
                 }
 
                 if (foundKeyFrame) {
-                    root.selectedKeyFrameMs = closestTime
                     draggingKeyFrame = true
                     dragStartTimeMs = closestTime
+                    locatorTimeMs = closestTime  // Use exact keyframe time for locators
                     root.keyFrameSelected(closestTime)
                 } else {
-                    root.selectedKeyFrameMs = -1
                     draggingKeyFrame = false
+                    root.backgroundClicked()
                 }
             }
 
             // Update locators
-            root.scrollLocatorChanged(clickTimeMs)
-            root.playLocatorChanged(clickTimeMs)
+            root.scrollLocatorChanged(locatorTimeMs)
+            root.playLocatorChanged(locatorTimeMs)
+
+            // Signal drag start for global capture
+            if (mouse.button === Qt.LeftButton) {
+                isDragging = true
+                root.locatorDragStarted()
+            }
 
             if (mouse.button === Qt.RightButton && foundKeyFrame) {
-                contextMenu.timeMs = root.selectedKeyFrameMs
+                contextMenu.timeMs = closestTime
                 contextMenu.popup()
             }
         }
 
         onPositionChanged: function(mouse) {
             if (pressed && (mouse.buttons & Qt.LeftButton)) {
+                root.snapEnabled = (mouse.modifiers & Qt.ShiftModifier)
                 var clampedX = Math.max(0, Math.min(mouse.x, width))
                 var newTimeMs = root.xToTime(clampedX)
 
@@ -236,10 +302,10 @@ Rectangle {
                 root.playLocatorChanged(newTimeMs)
 
                 if (draggingKeyFrame && root.track) {
-                    root.track.moveKeyFrame(root.selectedKeyFrameMs, newTimeMs)
-                    root.selectedKeyFrameMs = newTimeMs
-                    root.keyFrameMoved(dragStartTimeMs, newTimeMs)
-                    dragStartTimeMs = newTimeMs
+                    var snappedTimeMs = root.snapToGrid(newTimeMs)
+                    root.track.moveKeyFrame(dragStartTimeMs, snappedTimeMs)
+                    root.keyFrameMoved(dragStartTimeMs, snappedTimeMs)
+                    dragStartTimeMs = snappedTimeMs
                 }
             }
         }
@@ -247,9 +313,38 @@ Rectangle {
         onReleased: {
             draggingKeyFrame = false
             dragStartTimeMs = -1
+            if (isDragging) {
+                isDragging = false
+                root.locatorDragEnded()
+            }
         }
 
         onContainsMouseChanged: canvas.requestPaint()
+    }
+
+    // Public method to update locator from local X position (can be outside bounds)
+    function updateLocatorFromLocalX(localX, shiftPressed) {
+        snapEnabled = shiftPressed || false
+        var clampedX = Math.max(0, Math.min(localX, width))
+        var newTimeMs = xToTime(clampedX)
+
+        scrollLocatorChanged(newTimeMs)
+        playLocatorChanged(newTimeMs)
+
+        // Also move keyframe if dragging one
+        if (mouseArea.draggingKeyFrame && track) {
+            var snappedTimeMs = snapToGrid(newTimeMs)
+            track.moveKeyFrame(mouseArea.dragStartTimeMs, snappedTimeMs)
+            keyFrameMoved(mouseArea.dragStartTimeMs, snappedTimeMs)
+            mouseArea.dragStartTimeMs = snappedTimeMs
+        }
+    }
+
+    // End drag from external call
+    function endDrag() {
+        mouseArea.draggingKeyFrame = false
+        mouseArea.dragStartTimeMs = -1
+        mouseArea.isDragging = false
     }
 
     // Context menu for keyframes
@@ -258,23 +353,81 @@ Rectangle {
         property int timeMs: -1
 
         background: Rectangle {
-            implicitWidth: 150
+            implicitWidth: 180
             color: Theme.surface
             border.color: Theme.border
             radius: 2
         }
 
         MenuItem {
-            text: qsTr("Delete Keyframe")
+            text: qsTr("Copy Keyframe")
             onTriggered: {
                 if (root.track && contextMenu.timeMs >= 0) {
-                    root.track.deleteKeyFrame(contextMenu.timeMs)
-                    root.selectedKeyFrameMs = -1
+                    var data = {
+                        paramCount: root.track.paramCount,
+                        values: []
+                    }
+                    for (var i = 0; i < root.track.paramCount; i++) {
+                        data.values.push(root.track.timedValue(contextMenu.timeMs, i))
+                    }
+                    root.keyFrameCopied(data)
                 }
             }
 
             background: Rectangle {
-                implicitWidth: 150
+                implicitWidth: 180
+                implicitHeight: 28
+                color: parent.highlighted ? Theme.menuHighlight : "transparent"
+            }
+
+            contentItem: Text {
+                text: parent.text
+                color: parent.highlighted ? Theme.textOnHighlight : Theme.text
+                font.pixelSize: Theme.fontSizeNormal
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+
+        MenuItem {
+            text: qsTr("Paste Keyframe Here")
+            onTriggered: {
+                root.keyFramePasteRequested(contextMenu.timeMs)
+            }
+
+            background: Rectangle {
+                implicitWidth: 180
+                implicitHeight: 28
+                color: parent.highlighted ? Theme.menuHighlight : "transparent"
+            }
+
+            contentItem: Text {
+                text: parent.text
+                color: parent.highlighted ? Theme.textOnHighlight : Theme.text
+                font.pixelSize: Theme.fontSizeNormal
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+
+        MenuSeparator {
+            contentItem: Rectangle {
+                implicitWidth: 180
+                implicitHeight: 1
+                color: Theme.border
+            }
+        }
+
+        MenuItem {
+            text: qsTr("Delete Keyframe")
+            onTriggered: {
+                if (root.track && contextMenu.timeMs >= 0) {
+                    var deletedTime = contextMenu.timeMs
+                    root.track.deleteKeyFrame(deletedTime)
+                    root.keyFrameDeleted(deletedTime)
+                }
+            }
+
+            background: Rectangle {
+                implicitWidth: 180
                 implicitHeight: 28
                 color: parent.highlighted ? Theme.menuHighlight : "transparent"
             }
@@ -288,30 +441,28 @@ Rectangle {
         }
     }
 
-    // Track label on the left
-    Rectangle {
-        width: 100
-        height: parent.height
-        color: root.track ? root.track.color : Theme.surface
-        opacity: 0.8
+    // Watermark label - Format: "Instance / Track"
+    // Left-aligned with padding
+    Text {
+        anchors.left: parent.left
+        anchors.leftMargin: 12
+        anchors.verticalCenter: parent.verticalCenter
+        text: root.track ? root.track.nodeName + " / " + root.track.trackName : ""
+        color: root.track ? colorForNodeType(root.track.nodeType) : Theme.text
+        opacity: 0.6
+        font.pixelSize: Theme.fontSizeLarge
+        font.bold: true
+    }
 
-        Text {
-            anchors.centerIn: parent
-            text: root.track ? root.track.trackName : ""
-            color: Theme.text
-            font.pixelSize: Theme.fontSizeSmall
-            font.bold: root.isCurrentTrack
-            elide: Text.ElideRight
-            width: parent.width - 8
-            horizontalAlignment: Text.AlignHCenter
-        }
-
-        // Separator
-        Rectangle {
-            anchors.right: parent.right
-            width: 1
-            height: parent.height
-            color: Theme.border
-        }
+    // Right-aligned with padding (repeated)
+    Text {
+        anchors.right: parent.right
+        anchors.rightMargin: 12
+        anchors.verticalCenter: parent.verticalCenter
+        text: root.track ? root.track.nodeName + " / " + root.track.trackName : ""
+        color: root.track ? colorForNodeType(root.track.nodeType) : Theme.text
+        opacity: 0.6
+        font.pixelSize: Theme.fontSizeLarge
+        font.bold: true
     }
 }

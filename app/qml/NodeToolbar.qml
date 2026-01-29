@@ -27,6 +27,13 @@ Rectangle {
     signal laserToggled(bool enabled)
     signal zoneSelected(int index)
 
+    // Signals for transport controls
+    signal playToggled()
+    signal rewindRequested()
+    signal stopRequested()
+    signal loopToggled()
+    signal scrubChanged(int timeMs)
+
     // Zoom area mode state (set from outside)
     property bool zoomAreaActive: false
 
@@ -36,6 +43,19 @@ Rectangle {
     // Available zones model (set from outside)
     property var zonesModel: []
     property int currentZoneIndex: 0
+
+    // Favorite nodes (most frequently used, set from Main.qml)
+    property var favoriteNodeTypes: []
+
+    // Transport state (set from outside)
+    property bool isPlaying: false
+    property bool isLooping: true
+    property int playLocatorMs: 0
+    property int animationDurationMs: 10000
+
+    function isFavorite(nodeType) {
+        return favoriteNodeTypes.indexOf(nodeType) >= 0
+    }
 
     // Model of available node types
     property var nodeTypes: [
@@ -497,6 +517,17 @@ Rectangle {
                         }
                     }
 
+                    // Favorite star indicator
+                    Text {
+                        visible: toolbar.isFavorite(nodeButton.modelData.type)
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 2
+                        text: "\u2605"  // Filled star
+                        color: "#FFD700"  // Gold
+                        font.pixelSize: 10
+                    }
+
                     // Visual feedback during drag
                     opacity: dragArea.isDragging ? 0.5 : 1.0
                 }
@@ -543,6 +574,240 @@ Rectangle {
 
         // Right spacer
         Item { Layout.fillWidth: true }
+
+        // Transport controls
+        RowLayout {
+            spacing: 2
+
+            // Rewind
+            ToolButton {
+                id: rewindBtn
+                implicitWidth: Theme.toolbarButtonSize
+                implicitHeight: Theme.toolbarButtonSize
+
+                background: Rectangle {
+                    radius: 4
+                    color: rewindBtn.pressed ? Theme.surfacePressed : (rewindBtn.hovered ? Theme.surfaceHover : Theme.surface)
+                    border.color: rewindBtn.hovered ? Theme.accent : Theme.border
+                }
+
+                contentItem: Canvas {
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        var s = Math.min(width, height) * 0.8
+                        var ox = (width - s) / 2, oy = (height - s) / 2
+                        ctx.fillStyle = Theme.text
+                        // Bar
+                        ctx.fillRect(ox, oy + s * 0.15, s * 0.15, s * 0.7)
+                        // Triangle pointing left
+                        ctx.beginPath()
+                        ctx.moveTo(ox + s, oy + s * 0.15)
+                        ctx.lineTo(ox + s * 0.2, oy + s * 0.5)
+                        ctx.lineTo(ox + s, oy + s * 0.85)
+                        ctx.closePath()
+                        ctx.fill()
+                    }
+                    Component.onCompleted: requestPaint()
+                }
+
+                onClicked: toolbar.rewindRequested()
+                ToolTip.visible: enabled && hovered
+                ToolTip.text: qsTr("Rewind")
+                ToolTip.delay: 500
+            }
+
+            // Play/Pause
+            ToolButton {
+                id: playBtn
+                implicitWidth: Theme.toolbarButtonSize
+                implicitHeight: Theme.toolbarButtonSize
+
+                background: Rectangle {
+                    radius: 4
+                    color: playBtn.pressed ? Theme.surfacePressed : (playBtn.hovered ? Theme.surfaceHover : Theme.surface)
+                    border.color: toolbar.isPlaying ? Theme.accentBright : (playBtn.hovered ? Theme.accent : Theme.border)
+                    border.width: toolbar.isPlaying ? 2 : 1
+                }
+
+                contentItem: Canvas {
+                    property bool playing: toolbar.isPlaying
+                    onPlayingChanged: requestPaint()
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        var s = Math.min(width, height) * 0.8
+                        var ox = (width - s) / 2, oy = (height - s) / 2
+                        var col = toolbar.isPlaying ? Theme.accentBright : Theme.text
+                        ctx.fillStyle = col
+                        if (toolbar.isPlaying) {
+                            // Pause: two bars
+                            var bw = s * 0.25
+                            ctx.fillRect(ox + s * 0.15, oy + s * 0.15, bw, s * 0.7)
+                            ctx.fillRect(ox + s * 0.6, oy + s * 0.15, bw, s * 0.7)
+                        } else {
+                            // Play: triangle
+                            ctx.beginPath()
+                            ctx.moveTo(ox + s * 0.2, oy + s * 0.1)
+                            ctx.lineTo(ox + s * 0.9, oy + s * 0.5)
+                            ctx.lineTo(ox + s * 0.2, oy + s * 0.9)
+                            ctx.closePath()
+                            ctx.fill()
+                        }
+                    }
+                    Component.onCompleted: requestPaint()
+                }
+
+                onClicked: toolbar.playToggled()
+                ToolTip.visible: enabled && hovered
+                ToolTip.text: toolbar.isPlaying ? qsTr("Pause (Space)") : qsTr("Play (Space)")
+                ToolTip.delay: 500
+            }
+
+            // Stop
+            ToolButton {
+                id: stopBtn
+                implicitWidth: Theme.toolbarButtonSize
+                implicitHeight: Theme.toolbarButtonSize
+
+                background: Rectangle {
+                    radius: 4
+                    color: stopBtn.pressed ? Theme.surfacePressed : (stopBtn.hovered ? Theme.surfaceHover : Theme.surface)
+                    border.color: stopBtn.hovered ? Theme.accent : Theme.border
+                }
+
+                contentItem: Canvas {
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        var s = Math.min(width, height) * 0.8
+                        var ox = (width - s) / 2, oy = (height - s) / 2
+                        ctx.fillStyle = Theme.text
+                        ctx.fillRect(ox + s * 0.15, oy + s * 0.15, s * 0.7, s * 0.7)
+                    }
+                    Component.onCompleted: requestPaint()
+                }
+
+                onClicked: toolbar.stopRequested()
+                ToolTip.visible: enabled && hovered
+                ToolTip.text: qsTr("Stop")
+                ToolTip.delay: 500
+            }
+
+            // Loop toggle
+            ToolButton {
+                id: loopBtn
+                implicitWidth: Theme.toolbarButtonSize
+                implicitHeight: Theme.toolbarButtonSize
+                checkable: true
+                checked: toolbar.isLooping
+
+                background: Rectangle {
+                    radius: 4
+                    color: loopBtn.pressed ? Theme.surfacePressed : (loopBtn.hovered ? Theme.surfaceHover : Theme.surface)
+                    border.color: loopBtn.checked ? Theme.accentBright : (loopBtn.hovered ? Theme.accent : Theme.border)
+                    border.width: loopBtn.checked ? 2 : 1
+                }
+
+                contentItem: Canvas {
+                    property bool looping: loopBtn.checked
+                    onLoopingChanged: requestPaint()
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        var s = Math.min(width, height) * 0.8
+                        var ox = (width - s) / 2, oy = (height - s) / 2
+                        var cx = ox + s / 2, cy = oy + s / 2
+                        var r = s * 0.35
+                        var col = loopBtn.checked ? Theme.accentBright : Theme.text
+                        ctx.strokeStyle = col
+                        ctx.fillStyle = col
+                        ctx.lineWidth = 2
+                        ctx.lineCap = "round"
+                        // Circular arc (270 degrees)
+                        ctx.beginPath()
+                        ctx.arc(cx, cy, r, -Math.PI * 0.8, Math.PI * 0.6)
+                        ctx.stroke()
+                        // Arrowhead at end of arc
+                        var ax = cx + r * Math.cos(Math.PI * 0.6)
+                        var ay = cy + r * Math.sin(Math.PI * 0.6)
+                        ctx.beginPath()
+                        ctx.moveTo(ax, ay)
+                        ctx.lineTo(ax + 5, ay - 1)
+                        ctx.lineTo(ax + 1, ay - 5)
+                        ctx.closePath()
+                        ctx.fill()
+                    }
+                    Component.onCompleted: requestPaint()
+                }
+
+                onClicked: toolbar.loopToggled()
+                ToolTip.visible: enabled && hovered
+                ToolTip.text: qsTr("Loop (L)")
+                ToolTip.delay: 500
+            }
+
+            // Separator
+            Rectangle {
+                width: 1; height: Theme.toolbarButtonSize * 0.6
+                color: Theme.border
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            // Scrub slider
+            Slider {
+                id: scrubSlider
+                Layout.preferredWidth: 120
+                Layout.preferredHeight: Theme.toolbarButtonSize
+                from: 0; to: 100
+                value: toolbar.animationDurationMs > 0 ? (toolbar.playLocatorMs / toolbar.animationDurationMs * 100) : 0
+
+                onMoved: {
+                    var timeMs = Math.round(value / 100 * toolbar.animationDurationMs)
+                    toolbar.scrubChanged(timeMs)
+                }
+
+                background: Rectangle {
+                    x: scrubSlider.leftPadding
+                    y: scrubSlider.topPadding + scrubSlider.availableHeight / 2 - height / 2
+                    width: scrubSlider.availableWidth
+                    height: 4
+                    radius: 2
+                    color: Theme.backgroundLight
+
+                    Rectangle {
+                        width: scrubSlider.visualPosition * parent.width
+                        height: parent.height
+                        radius: 2
+                        color: Theme.accent
+                    }
+                }
+
+                handle: Rectangle {
+                    x: scrubSlider.leftPadding + scrubSlider.visualPosition * (scrubSlider.availableWidth - width)
+                    y: scrubSlider.topPadding + scrubSlider.availableHeight / 2 - height / 2
+                    width: 12; height: 12; radius: 6
+                    color: scrubSlider.pressed ? Theme.accentBright : Theme.accent
+                    border.color: Theme.border
+                }
+            }
+
+            // Percentage label
+            Label {
+                text: Math.round(scrubSlider.value) + "%"
+                color: Theme.text
+                font.pixelSize: Theme.fontSizeSmall
+                Layout.preferredWidth: 35
+                horizontalAlignment: Text.AlignRight
+            }
+        }
+
+        // Separator
+        Rectangle {
+            width: 1; height: Theme.toolbarButtonSize * 0.6
+            color: Theme.border
+            Layout.alignment: Qt.AlignVCenter
+        }
 
         // Zone selector
         RowLayout {

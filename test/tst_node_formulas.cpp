@@ -161,7 +161,7 @@ void TestNodeFormulas::testGizmoEllipseCenter()
     gizmo.setCenterY(0.0);
     gizmo.setHorizontalBorder(0.5);
     gizmo.setVerticalBorder(0.5);
-    gizmo.setFalloff(0.0);
+
 
     // At center, ratio should be 1.0
     qreal ratio = gizmo.computeRatio(0.0, 0.0, 0.0);
@@ -176,7 +176,7 @@ void TestNodeFormulas::testGizmoEllipseEdge()
     gizmo.setCenterY(0.0);
     gizmo.setHorizontalBorder(0.5);
     gizmo.setVerticalBorder(0.5);
-    gizmo.setFalloff(0.0);
+
 
     // At border edge, ratio should be close to 1.0 (just inside)
     qreal ratio = gizmo.computeRatio(0.49, 0.0, 0.0);
@@ -195,7 +195,7 @@ void TestNodeFormulas::testGizmoEllipseOutside()
     gizmo.setCenterY(0.0);
     gizmo.setHorizontalBorder(0.5);
     gizmo.setVerticalBorder(0.5);
-    gizmo.setFalloff(0.0);
+
 
     // Far outside, ratio should be 0.0
     qreal ratio = gizmo.computeRatio(1.0, 1.0, 0.0);
@@ -210,7 +210,7 @@ void TestNodeFormulas::testGizmoRectangleCenter()
     gizmo.setCenterY(0.0);
     gizmo.setHorizontalBorder(0.5);
     gizmo.setVerticalBorder(0.5);
-    gizmo.setFalloff(0.0);
+
 
     // At center, ratio should be 1.0
     qreal ratio = gizmo.computeRatio(0.0, 0.0, 0.0);
@@ -225,7 +225,7 @@ void TestNodeFormulas::testGizmoRectangleEdge()
     gizmo.setCenterY(0.0);
     gizmo.setHorizontalBorder(0.5);
     gizmo.setVerticalBorder(0.5);
-    gizmo.setFalloff(0.0);
+
 
     // Inside rectangle
     qreal ratio = gizmo.computeRatio(0.4, 0.4, 0.0);
@@ -244,7 +244,7 @@ void TestNodeFormulas::testGizmoAsymmetricBorders()
     gizmo.setCenterY(0.0);
     gizmo.setHorizontalBorder(0.8);
     gizmo.setVerticalBorder(0.3);
-    gizmo.setFalloff(0.0);
+
 
     // Inside on X axis (wide border)
     qreal ratio = gizmo.computeRatio(0.7, 0.0, 0.0);
@@ -581,14 +581,13 @@ void TestNodeFormulas::testRotationTweakAroundCenter()
 void TestNodeFormulas::testColorTweakTintMode()
 {
     ColorTweak tweak;
-    tweak.setMode(ColorTweak::Mode::Tint);
     tweak.setColor(QColor(255, 0, 0));  // Red
-    tweak.setIntensity(1.0);
+    tweak.setAlpha(1.0);
 
     QColor input(0, 255, 0);  // Green
     QColor result = tweak.apply(input, 1.0);
 
-    // Full tint towards red
+    // Full blend towards red (lerp with alpha=1.0)
     QCOMPARE(result.red(), 255);
     QCOMPARE(result.green(), 0);
     QCOMPARE(result.blue(), 0);
@@ -597,14 +596,13 @@ void TestNodeFormulas::testColorTweakTintMode()
 void TestNodeFormulas::testColorTweakReplaceMode()
 {
     ColorTweak tweak;
-    tweak.setMode(ColorTweak::Mode::Replace);
     tweak.setColor(QColor(255, 128, 0));  // Orange
-    tweak.setIntensity(1.0);
+    tweak.setAlpha(1.0);
 
     QColor input(0, 0, 255);  // Blue
     QColor result = tweak.apply(input, 1.0);
 
-    // Full replace
+    // Full blend towards orange (lerp with alpha=1.0)
     QCOMPARE(result.red(), 255);
     QCOMPARE(result.green(), 128);
     QCOMPARE(result.blue(), 0);
@@ -613,9 +611,8 @@ void TestNodeFormulas::testColorTweakReplaceMode()
 void TestNodeFormulas::testColorTweakAffectChannels()
 {
     ColorTweak tweak;
-    tweak.setMode(ColorTweak::Mode::Replace);
     tweak.setColor(QColor(255, 255, 255));  // White
-    tweak.setIntensity(1.0);
+    tweak.setAlpha(1.0);
     tweak.setAffectRed(true);
     tweak.setAffectGreen(false);
     tweak.setAffectBlue(false);
@@ -632,9 +629,8 @@ void TestNodeFormulas::testColorTweakAffectChannels()
 void TestNodeFormulas::testColorTweakFilter()
 {
     ColorTweak tweak;
-    tweak.setMode(ColorTweak::Mode::Replace);
     tweak.setColor(QColor(255, 0, 0));
-    tweak.setIntensity(1.0);
+    tweak.setAlpha(1.0);
 
     // Set filter to only affect colors with high green
     tweak.setFilterGreenMin(0.8);

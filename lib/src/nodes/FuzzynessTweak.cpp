@@ -18,6 +18,13 @@ FuzzynessTweak::FuzzynessTweak(QObject* parent)
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
+
+    // Automation: Amount track with amount (0)
+    auto* amountTrack = createAutomationTrack(QStringLiteral("Amount"), 1, QColor(255, 182, 193));
+    amountTrack->setupParameter(0, 0.0, 2.0, _amount, tr("Amount"), 100.0, QStringLiteral("%"));
+
+    auto* seedTrack = createAutomationTrack(QStringLiteral("Seed"), 1, QColor(169, 169, 169));
+    seedTrack->setupParameter(0, 0.0, 999999.0, _seed, tr("Seed"), 1.0, QString());
 }
 
 void FuzzynessTweak::setAmount(qreal a)
@@ -26,7 +33,10 @@ void FuzzynessTweak::setAmount(qreal a)
     if (!qFuzzyCompare(_amount, a))
     {
         _amount = a;
+        auto* track = automationTrack(QStringLiteral("Amount"));
+        if (track) track->setInitialValue(0, a);
         emit amountChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -53,7 +63,10 @@ void FuzzynessTweak::setSeed(int s)
     if (_seed != s)
     {
         _seed = s;
+        auto* track = automationTrack(QStringLiteral("Seed"));
+        if (track) track->setInitialValue(0, static_cast<qreal>(s));
         emit seedChanged();
+        emitPropertyChanged();
     }
 }
 
@@ -147,6 +160,22 @@ void FuzzynessTweak::propertiesFromJson(const QJsonObject& json)
     if (json.contains("seed")) setSeed(json["seed"].toInt());
     if (json.contains("useSeed")) setUseSeed(json["useSeed"].toBool());
     if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
+}
+
+void FuzzynessTweak::syncToAnimatedValues(int timeMs)
+{
+    // Only sync if automation is active for each track
+    auto* amountTrack = automationTrack(QStringLiteral("Amount"));
+    if (amountTrack && amountTrack->isAutomated())
+    {
+        _amount = amountTrack->timedValue(timeMs, 0);
+    }
+
+    auto* seedTrack = automationTrack(QStringLiteral("Seed"));
+    if (seedTrack && seedTrack->isAutomated())
+    {
+        _seed = static_cast<int>(seedTrack->timedValue(timeMs, 0));
+    }
 }
 
 } // namespace gizmotweak2

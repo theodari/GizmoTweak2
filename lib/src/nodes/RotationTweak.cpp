@@ -17,6 +17,14 @@ RotationTweak::RotationTweak(QObject* parent)
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
+
+    // Automation: Rotation track with angle (0)
+    auto* rotationTrack = createAutomationTrack(QStringLiteral("Rotation"), 1, QColor(255, 140, 0));
+    rotationTrack->setupParameter(0, -360.0, 360.0, _angle, tr("Angle"), 1.0, QStringLiteral("\u00B0"));
+
+    auto* centerTrack = createAutomationTrack(QStringLiteral("Center"), 2, QColor(186, 85, 211));
+    centerTrack->setupParameter(0, -1.0, 1.0, _centerX, tr("Center X"), 100.0, QStringLiteral("%"));
+    centerTrack->setupParameter(1, -1.0, 1.0, _centerY, tr("Center Y"), 100.0, QStringLiteral("%"));
 }
 
 void RotationTweak::setAngle(qreal a)
@@ -24,6 +32,9 @@ void RotationTweak::setAngle(qreal a)
     if (!qFuzzyCompare(_angle, a))
     {
         _angle = a;
+        // Sync to automation track initial value
+        auto* track = automationTrack(QStringLiteral("Rotation"));
+        if (track) track->setInitialValue(0, a);
         emit angleChanged();
         emitPropertyChanged();
     }
@@ -34,6 +45,9 @@ void RotationTweak::setCenterX(qreal cx)
     if (!qFuzzyCompare(_centerX, cx))
     {
         _centerX = cx;
+        // Sync to automation track initial value
+        auto* track = automationTrack(QStringLiteral("Center"));
+        if (track) track->setInitialValue(0, cx);
         emit centerXChanged();
         emitPropertyChanged();
     }
@@ -44,6 +58,9 @@ void RotationTweak::setCenterY(qreal cy)
     if (!qFuzzyCompare(_centerY, cy))
     {
         _centerY = cy;
+        // Sync to automation track initial value
+        auto* track = automationTrack(QStringLiteral("Center"));
+        if (track) track->setInitialValue(1, cy);
         emit centerYChanged();
         emitPropertyChanged();
     }
@@ -112,6 +129,23 @@ void RotationTweak::propertiesFromJson(const QJsonObject& json)
     if (json.contains("centerX")) setCenterX(json["centerX"].toDouble());
     if (json.contains("centerY")) setCenterY(json["centerY"].toDouble());
     if (json.contains("followGizmo")) setFollowGizmo(json["followGizmo"].toBool());
+}
+
+void RotationTweak::syncToAnimatedValues(int timeMs)
+{
+    // Only sync if automation is active for each track
+    auto* rotationTrack = automationTrack(QStringLiteral("Rotation"));
+    if (rotationTrack && rotationTrack->isAutomated())
+    {
+        _angle = rotationTrack->timedValue(timeMs, 0);
+    }
+
+    auto* centerTrack = automationTrack(QStringLiteral("Center"));
+    if (centerTrack && centerTrack->isAutomated())
+    {
+        _centerX = centerTrack->timedValue(timeMs, 0);
+        _centerY = centerTrack->timedValue(timeMs, 1);
+    }
 }
 
 } // namespace gizmotweak2

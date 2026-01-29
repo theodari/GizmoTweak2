@@ -9,16 +9,12 @@ Button {
 
     width: 20
     height: 20
-    checkable: true
-    checked: automationEnabled
-
-    onCheckedChanged: automationEnabled = checked
 
     background: Rectangle {
-        color: root.checked
+        color: root.automationEnabled
             ? (root.hovered ? "#4080C0" : Theme.accent)
             : (root.hovered ? Theme.surfaceHover : Theme.surface)
-        border.color: root.checked ? Theme.accentBright : Theme.border
+        border.color: root.automationEnabled ? Theme.accentBright : Theme.border
         border.width: 1
         radius: 4
     }
@@ -28,8 +24,9 @@ Button {
         Canvas {
             id: gearCanvas
             anchors.centerIn: parent
-            width: 14
-            height: 14
+            // Use button dimensions directly
+            width: Math.min(root.width, root.height) * 0.8
+            height: width
 
             onPaint: {
                 var ctx = getContext("2d")
@@ -37,13 +34,15 @@ Button {
 
                 var centerX = width / 2
                 var centerY = height / 2
-                var outerRadius = 6
-                var innerRadius = 3
-                var toothCount = 8
-                var toothDepth = 1.5
 
-                ctx.strokeStyle = root.checked ? "#FFFFFF" : Theme.text
-                ctx.fillStyle = root.checked ? "#FFFFFF" : Theme.text
+                // Scale all dimensions relative to canvas size
+                var outerRadius = width / 2
+                var innerRadius = outerRadius * 0.4
+                var toothCount = 8
+                var toothDepth = outerRadius * 0.25
+
+                ctx.strokeStyle = root.automationEnabled ? "#FFFFFF" : Theme.text
+                ctx.fillStyle = root.automationEnabled ? "#FFFFFF" : Theme.text
                 ctx.lineWidth = 1
 
                 // Draw gear teeth
@@ -80,15 +79,17 @@ Button {
                 ctx.stroke()
             }
 
+            onWidthChanged: requestPaint()
+
             Connections {
                 target: root
-                function onCheckedChanged() { gearCanvas.requestPaint() }
+                function onAutomationEnabledChanged() { gearCanvas.requestPaint() }
                 function onHoveredChanged() { gearCanvas.requestPaint() }
             }
         }
     }
 
     ToolTip.visible: enabled && hovered
-    ToolTip.text: checked ? qsTr("Disable automation") : qsTr("Enable automation")
+    ToolTip.text: automationEnabled ? qsTr("Disable automation") : qsTr("Enable automation")
     ToolTip.delay: 500
 }

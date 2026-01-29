@@ -48,7 +48,6 @@ set(LIB_HEADERS
     src/automation/Param.h
     src/automation/KeyFrame.h
     src/automation/AutomationTrack.h
-    src/engine/LaserEngine.h
     src/nodes/InputNode.h
     src/nodes/OutputNode.h
     src/nodes/GizmoNode.h

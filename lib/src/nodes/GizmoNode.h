@@ -25,11 +25,12 @@ public:
 
 private:
     Q_PROPERTY(Shape shape READ shape WRITE setShape NOTIFY shapeChanged)
+    Q_PROPERTY(qreal scaleX READ scaleX WRITE setScaleX NOTIFY scaleXChanged)
+    Q_PROPERTY(qreal scaleY READ scaleY WRITE setScaleY NOTIFY scaleYChanged)
     Q_PROPERTY(qreal centerX READ centerX WRITE setCenterX NOTIFY centerXChanged)
     Q_PROPERTY(qreal centerY READ centerY WRITE setCenterY NOTIFY centerYChanged)
     Q_PROPERTY(qreal horizontalBorder READ horizontalBorder WRITE setHorizontalBorder NOTIFY horizontalBorderChanged)
     Q_PROPERTY(qreal verticalBorder READ verticalBorder WRITE setVerticalBorder NOTIFY verticalBorderChanged)
-    Q_PROPERTY(qreal falloff READ falloff WRITE setFalloff NOTIFY falloffChanged)
     Q_PROPERTY(int falloffCurve READ falloffCurve WRITE setFalloffCurve NOTIFY falloffCurveChanged)
     Q_PROPERTY(qreal horizontalBend READ horizontalBend WRITE setHorizontalBend NOTIFY horizontalBendChanged)
     Q_PROPERTY(qreal verticalBend READ verticalBend WRITE setVerticalBend NOTIFY verticalBendChanged)
@@ -51,6 +52,13 @@ public:
     Shape shape() const { return _shape; }
     void setShape(Shape s);
 
+    // Scale (gizmo half-size)
+    qreal scaleX() const { return _scaleX; }
+    void setScaleX(qreal sx);
+
+    qreal scaleY() const { return _scaleY; }
+    void setScaleY(qreal sy);
+
     // Position
     qreal centerX() const { return _centerX; }
     void setCenterX(qreal x);
@@ -65,10 +73,7 @@ public:
     qreal verticalBorder() const { return _verticalBorder; }
     void setVerticalBorder(qreal b);
 
-    // Falloff
-    qreal falloff() const { return _falloff; }
-    void setFalloff(qreal f);
-
+    // Falloff curve
     int falloffCurve() const { return _falloffCurve; }
     void setFalloffCurve(int curve);
 
@@ -107,6 +112,10 @@ public:
     // Serialization
     QJsonObject propertiesToJson() const override;
     void propertiesFromJson(const QJsonObject& json) override;
+    void automationFromJson(const QJsonArray& json) override;
+
+    // Automation
+    void syncToAnimatedValues(int timeMs) override;
 
     // Legacy compatibility
     qreal radius() const { return (_horizontalBorder + _verticalBorder) / 2.0; }
@@ -114,11 +123,12 @@ public:
 
 signals:
     void shapeChanged();
+    void scaleXChanged();
+    void scaleYChanged();
     void centerXChanged();
     void centerYChanged();
     void horizontalBorderChanged();
     void verticalBorderChanged();
-    void falloffChanged();
     void falloffCurveChanged();
     void horizontalBendChanged();
     void verticalBendChanged();
@@ -130,22 +140,21 @@ signals:
     void noiseSpeedChanged();
 
 private:
-    qreal computeEllipseRatio(qreal x, qreal y) const;
-    qreal computeRectangleRatio(qreal x, qreal y) const;
-    qreal computeAngleRatio(qreal x, qreal y) const;
-    qreal computeLinearWaveRatio(qreal x, qreal y) const;
-    qreal computeCircularWaveRatio(qreal x, qreal y) const;
-    qreal applyFalloffCurve(qreal t) const;
-    qreal applyBend(qreal coord, qreal bend) const;
+    qreal computeEllipseRatio(qreal x1, qreal y1) const;
+    qreal computeRectangleRatio(qreal x1, qreal y1) const;
+    qreal computeAngleRatio(qreal x1, qreal y1) const;
+    qreal computeLinearWaveRatio(qreal x1, qreal y1) const;
+    qreal computeCircularWaveRatio(qreal x1, qreal y1) const;
     qreal applyNoise(qreal ratio, qreal x, qreal y, qreal time) const;
     qreal pseudoRandom(qreal x, qreal y) const;
 
     Shape _shape{Shape::Ellipse};
+    qreal _scaleX{1.0};
+    qreal _scaleY{1.0};
     qreal _centerX{0.0};
     qreal _centerY{0.0};
-    qreal _horizontalBorder{0.5};
-    qreal _verticalBorder{0.5};
-    qreal _falloff{0.2};
+    qreal _horizontalBorder{1.0};
+    qreal _verticalBorder{1.0};
     int _falloffCurve{QEasingCurve::Linear};
     qreal _horizontalBend{0.0};
     qreal _verticalBend{0.0};

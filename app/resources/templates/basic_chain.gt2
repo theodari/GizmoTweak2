@@ -1,0 +1,47 @@
+{
+    "version": 1,
+    "nodes": [
+        {
+            "uuid": "input-001",
+            "type": "Input",
+            "displayName": "Input",
+            "position": { "x": 100, "y": 200 },
+            "properties": {
+                "patternIndex": 0,
+                "bpm": 120,
+                "beatsPerMeasure": 4,
+                "measures": 2
+            }
+        },
+        {
+            "uuid": "position-001",
+            "type": "PositionTweak",
+            "displayName": "Position",
+            "position": { "x": 100, "y": 320 },
+            "properties": {
+                "x": 0,
+                "y": 0
+            }
+        },
+        {
+            "uuid": "output-001",
+            "type": "Output",
+            "displayName": "Output",
+            "position": { "x": 100, "y": 440 }
+        }
+    ],
+    "connections": [
+        {
+            "sourceNode": "input-001",
+            "sourcePort": "Frame",
+            "targetNode": "position-001",
+            "targetPort": "Frame In"
+        },
+        {
+            "sourceNode": "position-001",
+            "sourcePort": "Frame Out",
+            "targetNode": "output-001",
+            "targetPort": "Frame"
+        }
+    ]
+}

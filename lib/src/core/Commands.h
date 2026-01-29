@@ -114,4 +114,14 @@ private:
     QString _targetPortName;
 };
 
+// Marker command to mark graph as modified (for operations outside the undo system)
+class MarkModifiedCommand : public QUndoCommand
+{
+public:
+    explicit MarkModifiedCommand(QUndoCommand* parent = nullptr);
+
+    void undo() override {}
+    void redo() override {}
+};
+
 } // namespace gizmotweak2

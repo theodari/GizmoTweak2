@@ -1,0 +1,48 @@
+{
+    "version": 1,
+    "nodes": [
+        {
+            "uuid": "input-001",
+            "type": "Input",
+            "displayName": "Input",
+            "position": { "x": 100, "y": 150 },
+            "properties": {
+                "patternIndex": 0,
+                "bpm": 120,
+                "beatsPerMeasure": 4,
+                "measures": 2
+            }
+        },
+        {
+            "uuid": "wave-001",
+            "type": "WaveTweak",
+            "displayName": "Wave",
+            "position": { "x": 100, "y": 260 },
+            "properties": {
+                "amplitude": 20,
+                "frequency": 2,
+                "phase": 0
+            }
+        },
+        {
+            "uuid": "output-001",
+            "type": "Output",
+            "displayName": "Output",
+            "position": { "x": 100, "y": 370 }
+        }
+    ],
+    "connections": [
+        {
+            "sourceNode": "input-001",
+            "sourcePort": "Frame",
+            "targetNode": "wave-001",
+            "targetPort": "Frame In"
+        },
+        {
+            "sourceNode": "wave-001",
+            "sourcePort": "Frame Out",
+            "targetNode": "output-001",
+            "targetPort": "Frame"
+        }
+    ]
+}

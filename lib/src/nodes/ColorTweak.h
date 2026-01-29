@@ -13,18 +13,8 @@ class ColorTweak : public Node
     QML_ELEMENT
 
 public:
-    enum class Mode
-    {
-        Tint,       // Blend towards target color
-        Multiply,   // Multiply by target color
-        Add,        // Add target color
-        Replace     // Replace with target color
-    };
-    Q_ENUM(Mode)
-
-    Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
-    Q_PROPERTY(qreal intensity READ intensity WRITE setIntensity NOTIFY intensityChanged)
+    Q_PROPERTY(qreal alpha READ alpha WRITE setAlpha NOTIFY alphaChanged)
     Q_PROPERTY(bool affectRed READ affectRed WRITE setAffectRed NOTIFY affectRedChanged)
     Q_PROPERTY(bool affectGreen READ affectGreen WRITE setAffectGreen NOTIFY affectGreenChanged)
     Q_PROPERTY(bool affectBlue READ affectBlue WRITE setAffectBlue NOTIFY affectBlueChanged)
@@ -46,14 +36,11 @@ public:
     Category category() const override { return Category::Tweak; }
 
     // Properties
-    Mode mode() const { return _mode; }
-    void setMode(Mode m);
-
     QColor color() const { return _color; }
     void setColor(const QColor& c);
 
-    qreal intensity() const { return _intensity; }
-    void setIntensity(qreal i);
+    qreal alpha() const { return _alpha; }
+    void setAlpha(qreal a);
 
     bool affectRed() const { return _affectRed; }
     void setAffectRed(bool affect);
@@ -96,10 +83,12 @@ public:
     QJsonObject propertiesToJson() const override;
     void propertiesFromJson(const QJsonObject& json) override;
 
+    // Automation sync
+    void syncToAnimatedValues(int timeMs) override;
+
 signals:
-    void modeChanged();
     void colorChanged();
-    void intensityChanged();
+    void alphaChanged();
     void affectRedChanged();
     void affectGreenChanged();
     void affectBlueChanged();
@@ -112,9 +101,8 @@ signals:
     void followGizmoChanged();
 
 private:
-    Mode _mode{Mode::Tint};
     QColor _color{Qt::white};
-    qreal _intensity{1.0};
+    qreal _alpha{0.0};  // Range -2 to 2 (displayed as -200% to 200%)
     bool _affectRed{true};
     bool _affectGreen{true};
     bool _affectBlue{true};

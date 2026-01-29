@@ -8,7 +8,52 @@ Rectangle {
     id: root
 
     property NodeGraph graph: null
-    property real currentTime: timeSlider.value / 100.0  // Normalized 0-1
+    property real currentTime: playLocatorMs / 1000.0  // Time in seconds for evaluator
+
+    // Playback state (shared with timeline)
+    property bool isPlaying: false
+    property bool isLooping: true
+    property int playLocatorMs: 0
+    property int animationDurationMs: 10000
+
+    // Grid toggle
+    property bool showGrid: true
+
+    // Keyframe editing context (set from Main.qml)
+    property AutomationTrack currentTrack: null
+    property int currentKeyFrameMs: -1
+    property int scrollLocatorMs: 0
+
+    // Signals for timeline synchronization
+    signal playStateChanged(bool playing)
+    signal playLocatorChanged(int timeMs)
+    signal rewindRequested()
+    signal stopRequested()
+    signal keyFrameDataModified()
+
+    // Public function for external control (keyboard shortcuts from Main.qml)
+    function togglePlayback() {
+        root.isPlaying = !root.isPlaying
+        root.playStateChanged(root.isPlaying)
+    }
+
+    function rewind() {
+        root.isPlaying = false
+        root.playLocatorMs = 0
+        root.rewindRequested()
+        root.playLocatorChanged(0)
+    }
+
+    function stop() {
+        root.isPlaying = false
+        root.playLocatorMs = 0
+        root.stopRequested()
+        root.playLocatorChanged(0)
+    }
+
+    function toggleLoop() {
+        root.isLooping = !root.isLooping
+    }
 
     color: Theme.surface
     border.color: Theme.border
@@ -17,25 +62,9 @@ Rectangle {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 8
-        spacing: 8
+        spacing: 4
 
-        // Header
-        Label {
-            text: qsTr("Preview")
-            color: Theme.text
-            font.pixelSize: Theme.fontSizeNormal
-            font.bold: true
-            Layout.fillWidth: true
-        }
-
-        Rectangle {
-            height: 1
-            color: Theme.border
-            Layout.fillWidth: true
-        }
-
-        // Preview using FramePreviewItem (C++ QPainter rendering)
-        // FramePreviewItem observes the graph directly and evaluates it
+        // Preview rendering area with hover Grid button
         Rectangle {
             id: previewBackground
             Layout.fillWidth: true
@@ -48,133 +77,291 @@ Rectangle {
             FramePreviewItem {
                 id: framePreview
                 anchors.fill: parent
-                graph: root.graph        // Pass graph - FramePreviewItem evaluates it
-                time: root.currentTime   // Pass time
-                showGrid: showGridCheck.checked
+                graph: root.graph
+                time: root.currentTime
+                showGrid: root.showGrid
                 gridColor: Theme.previewGrid
                 backgroundColor: Theme.previewBackground
                 lineWidth: 2.0
             }
-        }
 
-        // Controls
-        GridLayout {
-            columns: 3
-            columnSpacing: 8
-            rowSpacing: 4
-            Layout.fillWidth: true
-
-            Label {
-                text: qsTr("Time:")
-                color: Theme.textMuted
-                font.pixelSize: Theme.fontSizeSmall
+            // Hover area for Grid toggle button
+            MouseArea {
+                id: previewHover
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
             }
 
-            Slider {
-                id: timeSlider
-                from: 0
-                to: 100
-                value: 0
-                stepSize: 1
-                Layout.fillWidth: true
+            // Grid toggle button (visible on hover)
+            ToolButton {
+                id: gridToggle
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.margins: 4
+                width: 24; height: 24
+                opacity: (previewHover.containsMouse || gridToggle.hovered) ? 0.8 : 0
+                visible: opacity > 0
 
-                ToolTip.visible: enabled && hovered
-                ToolTip.text: qsTr("Animation time position")
-                ToolTip.delay: 500
-            }
+                Behavior on opacity { NumberAnimation { duration: 150 } }
 
-            Label {
-                text: Math.round(timeSlider.value) + "%"
-                color: Theme.text
-                font.pixelSize: Theme.fontSizeSmall
-                Layout.preferredWidth: 35
-            }
-        }
+                background: Rectangle {
+                    radius: 3
+                    color: root.showGrid ? Theme.accent : Theme.surface
+                    border.color: Theme.border
+                    opacity: 0.9
+                }
 
-        // Options row
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
+                contentItem: Canvas {
+                    id: gridIconCanvas
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        var p = 3, w = width - p * 2, h = height - p * 2
+                        var c = root.showGrid ? "#FFFFFF" : Theme.text
+                        ctx.strokeStyle = c
+                        ctx.lineWidth = 1
 
-            StyledCheckBox {
-                id: showGridCheck
-                text: qsTr("Grid")
-                checked: true
-                font.pixelSize: Theme.fontSizeSmall
+                        // 4x4 grid lines (matching actual preview grid)
+                        for (var i = 1; i < 4; i++) {
+                            ctx.beginPath()
+                            ctx.moveTo(p + i * w / 4, p)
+                            ctx.lineTo(p + i * w / 4, p + h)
+                            ctx.stroke()
+                            ctx.beginPath()
+                            ctx.moveTo(p, p + i * h / 4)
+                            ctx.lineTo(p + w, p + i * h / 4)
+                            ctx.stroke()
+                        }
 
-                ToolTip.visible: enabled && hovered
-                ToolTip.text: qsTr("Show/hide reference grid")
-                ToolTip.delay: 500
-            }
+                        // Center cross (brighter)
+                        ctx.strokeStyle = Qt.lighter(c, 1.5)
+                        ctx.lineWidth = 1.5
+                        var cx = p + w / 2, cy = p + h / 2, cr = 2
+                        ctx.beginPath()
+                        ctx.moveTo(cx - cr, cy)
+                        ctx.lineTo(cx + cr, cy)
+                        ctx.stroke()
+                        ctx.beginPath()
+                        ctx.moveTo(cx, cy - cr)
+                        ctx.lineTo(cx, cy + cr)
+                        ctx.stroke()
+                    }
+                    Component.onCompleted: requestPaint()
 
-            StyledCheckBox {
-                id: showSourceCheck
-                text: qsTr("Source")
-                checked: false
-                font.pixelSize: Theme.fontSizeSmall
-
-                // TODO: Implement source frame overlay in FramePreviewItem
-
-                ToolTip.visible: enabled && hovered
-                ToolTip.text: qsTr("Show/hide original source frame")
-                ToolTip.delay: 500
-            }
-
-            Button {
-                id: playButton
-                implicitWidth: Theme.toolbarButtonSize
-                implicitHeight: Theme.toolbarButtonSize
-
-                property bool playing: false
-
-                onClicked: {
-                    playing = !playing
-                    if (!playing) {
-                        // Reset to beginning when stopped
-                        timeSlider.value = 0
-                        animationTimer.elapsed = 0
+                    Connections {
+                        target: root
+                        function onShowGridChanged() { gridIconCanvas.requestPaint() }
                     }
                 }
 
-                background: Rectangle {
-                    color: playButton.down ? Theme.surfacePressed : (playButton.hovered ? Theme.surfaceHover : Theme.surface)
-                    border.color: playButton.playing ? Theme.accent : Theme.border
-                    border.width: playButton.playing ? 2 : 1
-                    radius: 4
-                }
-
-                contentItem: Text {
-                    text: playButton.playing ? "\u25A0" : "\u25B6"  // Stop / Play symbols
-                    color: playButton.playing ? Theme.accent : Theme.text
-                    font.pixelSize: 14
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
+                onClicked: root.showGrid = !root.showGrid
                 ToolTip.visible: enabled && hovered
-                ToolTip.text: playing ? qsTr("Stop animation") : qsTr("Play animation")
+                ToolTip.text: root.showGrid ? qsTr("Hide grid") : qsTr("Show grid")
                 ToolTip.delay: 500
             }
-
-            Item { Layout.fillWidth: true }
         }
 
-        // Spacer to push everything to the top
-        Item { Layout.fillHeight: true }
+        // Separator
+        Rectangle {
+            Layout.fillWidth: true; height: 1; color: Theme.border
+        }
+
+        // Keyframe editor section (below preview)
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 4
+
+            // Header
+            RowLayout {
+                Layout.fillWidth: true
+
+                Label {
+                    text: root.currentKeyFrameMs >= 0 ? qsTr("Keyframe") : qsTr("Current values")
+                    color: Theme.text
+                    font.pixelSize: Theme.fontSizeNormal
+                    font.bold: root.currentKeyFrameMs >= 0
+                    font.italic: root.currentKeyFrameMs < 0 && root.currentTrack !== null
+                }
+
+                Item { Layout.fillWidth: true }
+
+                // Track color indicator
+                Rectangle {
+                    visible: root.currentTrack !== null
+                    width: 10; height: 10; radius: 5
+                    color: root.currentTrack ? root.currentTrack.color : "transparent"
+                    border.color: Theme.border
+                }
+
+                Label {
+                    visible: root.currentTrack !== null
+                    text: root.currentTrack ? root.currentTrack.trackName : ""
+                    color: Theme.textMuted
+                    font.pixelSize: Theme.fontSizeSmall
+                }
+            }
+
+            // Keyframe selected: show time + curve + params
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: root.currentTrack !== null && root.currentKeyFrameMs >= 0
+                spacing: 4
+
+                // Time display
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Label {
+                        text: qsTr("Time:")
+                        color: Theme.propLabel
+                        font.pixelSize: Theme.propFontSize
+                        Layout.preferredWidth: 55
+                    }
+
+                    Label {
+                        text: root.currentKeyFrameMs >= 0 ? (root.currentKeyFrameMs / 1000).toFixed(3) + " s" : "-"
+                        color: Theme.text
+                        font.pixelSize: Theme.propFontSize
+                        font.bold: true
+                    }
+
+                    Item { Layout.fillWidth: true }
+                }
+
+                // Curve selection grid
+                ColumnLayout {
+                    id: curveSection
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    Label {
+                        text: qsTr("Curve")
+                        color: Theme.propLabel
+                        font.pixelSize: Theme.propFontSize
+                    }
+
+                    readonly property var curveTypes: [
+                        0,          // Linear
+                        1, 2, 3,    // Quad
+                        5, 6, 7,    // Cubic
+                        9, 10, 11,  // Sine
+                        13, 14, 15, // Expo
+                        25, 26, 27  // Bounce
+                    ]
+
+                    property int selectedCurveType: 0
+
+                    function refreshCurveType() {
+                        if (root.currentTrack && root.currentKeyFrameMs >= 0)
+                            selectedCurveType = root.currentTrack.keyFrameCurveType(root.currentKeyFrameMs)
+                        else
+                            selectedCurveType = 0
+                    }
+
+                    Connections {
+                        target: root
+                        function onCurrentTrackChanged() { curveSection.refreshCurveType() }
+                        function onCurrentKeyFrameMsChanged() { curveSection.refreshCurveType() }
+                    }
+
+                    Grid {
+                        columns: 4
+                        spacing: 2
+                        Layout.fillWidth: true
+
+                        Repeater {
+                            model: curveSection.curveTypes
+
+                            CurveIconButton {
+                                curveType: modelData
+                                selected: curveSection.selectedCurveType === modelData
+                                width: 28; height: 28
+                                onClicked: {
+                                    if (root.currentTrack && root.currentKeyFrameMs >= 0) {
+                                        root.currentTrack.setKeyFrameCurveType(root.currentKeyFrameMs, modelData)
+                                        curveSection.selectedCurveType = modelData
+                                        root.keyFrameDataModified()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true; height: 1; color: Theme.border
+                    Layout.topMargin: 2; Layout.bottomMargin: 2
+                }
+
+                // Editable parameter rows
+                Repeater {
+                    model: root.currentTrack ? root.currentTrack.paramCount : 0
+
+                    KeyframeParameterRow {
+                        Layout.fillWidth: true
+                        track: root.currentTrack
+                        keyFrameMs: root.currentKeyFrameMs
+                        paramIndex: index
+
+                        onValueModified: root.keyFrameDataModified()
+                    }
+                }
+            }
+
+            // No keyframe selected but track active: show read-only values
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: root.currentTrack !== null && root.currentKeyFrameMs < 0
+                spacing: 4
+
+                Repeater {
+                    model: root.currentTrack ? root.currentTrack.paramCount : 0
+
+                    ReadOnlyParameterRow {
+                        Layout.fillWidth: true
+                        track: root.currentTrack
+                        paramIndex: index
+                        timeMs: root.scrollLocatorMs
+                    }
+                }
+            }
+
+            // No track selected
+            Label {
+                visible: root.currentTrack === null
+                text: qsTr("Select a track")
+                color: Theme.textMuted
+                font.pixelSize: Theme.fontSizeSmall
+                font.italic: true
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 8
+            }
+
+            // Spacer
+            Item { Layout.fillHeight: true }
+        }
     }
 
     // Animation timer
     Timer {
         id: animationTimer
-        interval: 16  // ~60 FPS
-        running: playButton.playing
+        interval: 40  // 25 FPS
+        running: root.isPlaying
         repeat: true
 
-        property real elapsed: 0
-
         onTriggered: {
-            elapsed += interval / 1000.0 * 100  // Scale to percentage
-            timeSlider.value = elapsed % 100
+            root.playLocatorMs += interval
+            if (root.playLocatorMs >= root.animationDurationMs) {
+                if (root.isLooping) {
+                    root.playLocatorMs = 0
+                } else {
+                    root.isPlaying = false
+                    root.playLocatorMs = root.animationDurationMs
+                }
+            }
+            root.playLocatorChanged(root.playLocatorMs)
         }
     }
 }

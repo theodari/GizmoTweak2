@@ -1,4 +1,5 @@
 #include "AutomationTrack.h"
+#include "core/Node.h"
 #include <QDebug>
 
 namespace gizmotweak2
@@ -212,6 +213,47 @@ bool AutomationTrack::fromJson(const QJsonObject& json)
     return true;
 }
 
+void AutomationTrack::keyframesFromJson(const QJsonObject& json)
+{
+    // Load keyframes, automated flag, and initial values from JSON
+    // Preserve other parameter metadata (min, max, displayRatio, suffix, name) from setupParameter
+    _automated = json["automated"].toBool();
+
+    // Load initial values from JSON (but keep other metadata from setupParameter)
+    auto paramsArray = json["parameters"].toArray();
+    for (int i = 0; i < qMin(_nbParams, static_cast<int>(paramsArray.size())); ++i)
+    {
+        auto paramObj = paramsArray[i].toObject();
+        // Only load initialValue, preserve min/max/displayRatio/suffix/name from setupParameter
+        if (paramObj.contains("initialValue"))
+        {
+            _parameters[i].initialValue = paramObj["initialValue"].toDouble();
+        }
+    }
+
+    // Clear and reload keyframes
+    qDeleteAll(_keyFrames);
+    _keyFrames.clear();
+
+    auto keyFramesArray = json["keyFrames"].toArray();
+    for (const auto& kfVal : keyFramesArray)
+    {
+        auto kfObj = kfVal.toObject();
+        int timeMs = kfObj["time"].toInt();
+        auto* kf = new KeyFrame(_nbParams);
+        if (kf->fromJson(kfObj["data"].toObject()))
+        {
+            _keyFrames.insert(timeMs, kf);
+        }
+        else
+        {
+            delete kf;
+        }
+    }
+
+    emit keyFrameCountChanged();
+}
+
 void AutomationTrack::setupParameter(int paramIndex, double minValue, double maxValue,
                                      double initialValue, const QString& paramName,
                                      double displayRatio, const QString& suffix)
@@ -258,45 +300,57 @@ void AutomationTrack::setColor(const QColor& color)
     }
 }
 
+QString AutomationTrack::nodeType() const
+{
+    auto* node = qobject_cast<Node*>(parent());
+    return node ? node->type() : QString();
+}
+
+QString AutomationTrack::nodeName() const
+{
+    auto* node = qobject_cast<Node*>(parent());
+    return node ? node->displayName() : QString();
+}
+
 double AutomationTrack::minValue(int index) const
 {
-    Q_ASSERT(index >= 0 && index < _nbParams);
+    if (index < 0 || index >= _nbParams) return 0.0;
     return _parameters[index].minValue;
 }
 
 double AutomationTrack::maxValue(int index) const
 {
-    Q_ASSERT(index >= 0 && index < _nbParams);
+    if (index < 0 || index >= _nbParams) return 1.0;
     return _parameters[index].maxValue;
 }
 
 double AutomationTrack::initialValue(int index) const
 {
-    Q_ASSERT(index >= 0 && index < _nbParams);
+    if (index < 0 || index >= _nbParams) return 0.0;
     return _parameters[index].initialValue;
 }
 
 void AutomationTrack::setInitialValue(int index, double value)
 {
-    Q_ASSERT(index >= 0 && index < _nbParams);
+    if (index < 0 || index >= _nbParams) return;
     _parameters[index].initialValue = value;
 }
 
 QString AutomationTrack::parameterName(int index) const
 {
-    Q_ASSERT(index >= 0 && index < _nbParams);
+    if (index < 0 || index >= _nbParams) return QString();
     return _parameters[index].paramName;
 }
 
 double AutomationTrack::displayRatio(int index) const
 {
-    Q_ASSERT(index >= 0 && index < _nbParams);
+    if (index < 0 || index >= _nbParams) return 1.0;
     return _parameters[index].displayRatio;
 }
 
 QString AutomationTrack::suffix(int index) const
 {
-    Q_ASSERT(index >= 0 && index < _nbParams);
+    if (index < 0 || index >= _nbParams) return QString();
     return _parameters[index].suffix;
 }
 
@@ -346,7 +400,7 @@ void AutomationTrack::moveKeyFrame(int oldTimeMs, int newTimeMs)
 
 void AutomationTrack::updateKeyFrameValue(int timeMs, int paramIndex, double value)
 {
-    Q_ASSERT(paramIndex >= 0 && paramIndex < _nbParams);
+    if (paramIndex < 0 || paramIndex >= _nbParams) return;
 
     auto it = _keyFrames.find(timeMs);
     if (it != _keyFrames.end())
@@ -372,7 +426,18 @@ bool AutomationTrack::hasKeyFrameAt(int timeMs) const
 
 double AutomationTrack::timedValue(int timeMs, int paramIndex) const
 {
-    Q_ASSERT(paramIndex >= 0 && paramIndex < _nbParams);
+    // Defensive bounds check - return 0 for invalid indices instead of crashing
+    if (paramIndex < 0 || paramIndex >= _nbParams)
+    {
+        return 0.0;
+    }
+
+    // Handle negative time (e.g., from TimeShift with delay) - return initial value
+    // because at t<0, no animation has started yet
+    if (timeMs < 0)
+    {
+        return _parameters[paramIndex].initialValue;
+    }
 
     if (_keyFrames.isEmpty())
     {
@@ -530,6 +595,24 @@ QString AutomationTrack::toolTipText(int timeMs) const
         }
     }
     return text;
+}
+
+int AutomationTrack::keyFrameCurveType(int timeMs) const
+{
+    auto it = _keyFrames.find(timeMs);
+    if (it != _keyFrames.end())
+        return static_cast<int>(it.value()->curveType());
+    return 0; // Linear
+}
+
+void AutomationTrack::setKeyFrameCurveType(int timeMs, int curveType)
+{
+    auto it = _keyFrames.find(timeMs);
+    if (it != _keyFrames.end())
+    {
+        it.value()->setCurveType(static_cast<QEasingCurve::Type>(curveType));
+        emit keyFrameModified(timeMs);
+    }
 }
 
 } // namespace gizmotweak2
