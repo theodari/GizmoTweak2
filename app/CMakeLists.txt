@@ -3,8 +3,7 @@ project(GizmoTweak2App)
 # Set Qt policy to suppress QTP0001 warning about QML resource prefix
 qt_policy(SET QTP0001 NEW)
 
-# Executable name includes engine name
-set(APP_NAME "GizmoTweak2_Excalibur")
+set(APP_NAME "GizmoTweak2")
 
 message(STATUS "Building ${APP_NAME}")
 

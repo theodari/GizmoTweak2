@@ -116,3 +116,33 @@ target_link_libraries(tst_zoom
 )
 
 add_test(NAME ZoomTests COMMAND tst_zoom)
+
+# Test Port & Connection edge cases
+add_executable(tst_port_connection
+    tst_port_connection.cpp
+)
+
+target_link_libraries(tst_port_connection
+    PRIVATE
+        GizmoTweakLib2
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Test
+)
+
+add_test(NAME PortConnectionTests COMMAND tst_port_connection)
+
+# Test evaluateUpTo (partial graph evaluation)
+add_executable(tst_evaluate_up_to
+    tst_evaluate_up_to.cpp
+)
+
+target_link_libraries(tst_evaluate_up_to
+    PRIVATE
+        GizmoTweakLib2
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Test
+)
+
+add_test(NAME EvaluateUpToTests COMMAND tst_evaluate_up_to)
