@@ -38,7 +38,7 @@ Item {
 
     // Use effectiveDataType for proper coloring of RatioAny connections
     property int effectiveType: visible ? connection.sourcePort.effectiveDataType : Port.DataType.Frame
-    property color cableColor: !visible ? Theme.border : (effectiveType === Port.DataType.Frame ? Theme.cableFrame : (effectiveType === Port.DataType.Ratio2D ? Theme.cableRatio2D : (effectiveType === Port.DataType.Ratio1D ? Theme.cableRatio1D : Theme.border)))
+    property color cableColor: !visible ? Theme.border : (effectiveType === Port.DataType.Frame ? Theme.cableFrame : (effectiveType === Port.DataType.Position ? Theme.cablePosition : (effectiveType === Port.DataType.Ratio2D ? Theme.cableRatio2D : (effectiveType === Port.DataType.Ratio1D ? Theme.cableRatio1D : Theme.border))))
 
     // Determine if this is a vertical connection (Frame type)
     property bool isVertical: visible && effectiveType === Port.DataType.Frame

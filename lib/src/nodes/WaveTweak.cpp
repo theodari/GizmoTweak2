@@ -14,6 +14,7 @@ WaveTweak::WaveTweak(QObject* parent)
     // Inputs
     addInput(QStringLiteral("frame"), Port::DataType::Frame, true);  // Required
     addInput(QStringLiteral("ratio"), Port::DataType::RatioAny);  // Accepts Ratio1D or Ratio2D
+    addInput(QStringLiteral("center"), Port::DataType::Position);  // Center override
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
@@ -143,7 +144,7 @@ void WaveTweak::setFollowGizmo(bool follow)
 }
 
 QPointF WaveTweak::apply(qreal x, qreal y, qreal ratio,
-                         qreal /*gizmoX*/, qreal /*gizmoY*/) const
+                         qreal gizmoX, qreal gizmoY) const
 {
     if (qFuzzyIsNull(_amplitude) || qFuzzyIsNull(ratio) || qFuzzyIsNull(_wavelength))
     {
@@ -156,17 +157,18 @@ QPointF WaveTweak::apply(qreal x, qreal y, qreal ratio,
     // Convert phase to radians
     qreal phaseRad = qDegreesToRadians(_phase);
 
+    // Center = own automatable center + position cable offset (additive)
+    qreal cx = _centerX + gizmoX;
+    qreal cy = _centerY + gizmoY;
+
     qreal resultX = x;
     qreal resultY = y;
 
     if (_radial)
     {
         // Radial mode: concentric waves from center
-        // Always use centerX/centerY as transformation center
-        // (followGizmo only controls whether ratio comes from gizmo or is 1.0)
-
-        qreal dx = x - _centerX;
-        qreal dy = y - _centerY;
+        qreal dx = x - cx;
+        qreal dy = y - cy;
         qreal distance = qSqrt(dx * dx + dy * dy);
 
         if (distance > 0.0001)

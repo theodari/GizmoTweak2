@@ -15,6 +15,7 @@ SqueezeTweak::SqueezeTweak(QObject* parent)
     // Inputs
     addInput(QStringLiteral("frame"), Port::DataType::Frame, true);  // Required
     addInput(QStringLiteral("ratio"), Port::DataType::RatioAny);  // Accepts Ratio1D or Ratio2D
+    addInput(QStringLiteral("center"), Port::DataType::Position);  // Center override
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
@@ -104,19 +105,20 @@ void SqueezeTweak::setFollowGizmo(bool follow)
 }
 
 QPointF SqueezeTweak::apply(qreal x, qreal y, qreal ratio,
-                            qreal /*gizmoX*/, qreal /*gizmoY*/) const
+                            qreal gizmoX, qreal gizmoY) const
 {
     if (qFuzzyIsNull(_intensity) || qFuzzyIsNull(ratio))
     {
         return QPointF(x, y);
     }
 
-    // Always use centerX/centerY as transformation center
-    // (followGizmo only controls whether ratio comes from gizmo or is 1.0)
+    // Center = own automatable center + position cable offset (additive)
+    qreal cx = _centerX + gizmoX;
+    qreal cy = _centerY + gizmoY;
 
     // Convert to coordinates relative to center
-    qreal dx = x - _centerX;
-    qreal dy = y - _centerY;
+    qreal dx = x - cx;
+    qreal dy = y - cy;
 
     // Effective intensity based on ratio
     qreal effectiveIntensity = _intensity * ratio;
@@ -155,8 +157,8 @@ QPointF SqueezeTweak::apply(qreal x, qreal y, qreal ratio,
     }
 
     // Convert back to absolute coordinates
-    qreal resultX = _centerX + newX;
-    qreal resultY = _centerY + newY;
+    qreal resultX = cx + newX;
+    qreal resultY = cy + newY;
 
     return QPointF(resultX, resultY);
 }

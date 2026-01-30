@@ -112,6 +112,26 @@ Rectangle {
         return null
     }
 
+    function getPositionInput() {
+        if (!nodeData || typeof nodeData.inputCount !== 'function') return null
+        var count = nodeData.inputCount()
+        for (var i = 0; i < count; i++) {
+            var port = nodeData.inputAt(i)
+            if (port && port.dataType === Port.DataType.Position) return port
+        }
+        return null
+    }
+
+    function getPositionOutput() {
+        if (!nodeData || typeof nodeData.outputCount !== 'function') return null
+        var count = nodeData.outputCount()
+        for (var i = 0; i < count; i++) {
+            var port = nodeData.outputAt(i)
+            if (port && port.dataType === Port.DataType.Position) return port
+        }
+        return null
+    }
+
     // Drag handling for the node itself (declared first so ports are on top)
     // NOTE: We do NOT use drag.target because it breaks QML bindings on x/y.
     // Instead we handle drag manually via mouse deltas → nodeData.position.
@@ -380,7 +400,8 @@ Rectangle {
 
         width: previewSize
         height: previewSize
-        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.left: parent.left
+        anchors.leftMargin: 4
         anchors.verticalCenter: parent.verticalCenter
 
         color: "#000000"  // Black background like laser display
@@ -741,7 +762,7 @@ Rectangle {
         }
     }
 
-    // LEFT PORTS (for Shapes/Utility inputs, and Tweak ratio input)
+    // LEFT PORTS (for Shapes/Utility inputs, and Tweak ratio input — excluding Position)
     Column {
         id: leftPorts
         visible: hasLeftPorts
@@ -756,7 +777,7 @@ Rectangle {
             delegate: PortItem {
                 required property int index
                 property var thePort: !nodeData ? null : (isShapeOrUtility ? nodeData.inputAt(index) : (isTweak ? getRatioInput() : null))
-                visible: thePort && thePort.visible
+                visible: thePort && thePort.visible && thePort.dataType !== Port.DataType.Position
                 port: thePort
                 isInput: true
                 showLabel: false
@@ -770,7 +791,7 @@ Rectangle {
         }
     }
 
-    // RIGHT PORTS (for Shapes/Utility outputs)
+    // RIGHT PORTS (for Shapes/Utility outputs — excluding Position)
     Column {
         id: rightPorts
         visible: hasRightPorts
@@ -784,7 +805,9 @@ Rectangle {
 
             delegate: PortItem {
                 required property int index
-                port: nodeData ? nodeData.outputAt(index) : null
+                property var thePort: nodeData ? nodeData.outputAt(index) : null
+                visible: thePort && thePort.dataType !== Port.DataType.Position
+                port: thePort
                 isInput: false
                 showLabel: false
                 connectionDragging: root.connectionDragging
@@ -795,5 +818,47 @@ Rectangle {
                 onDragEnded: function(pos) { root.connectionDragEnded(pos) }
             }
         }
+    }
+
+    // POSITION INPUT PORT (for tweaks with center — left side, near top)
+    PortItem {
+        id: positionInputPort
+        property var posPort: isTweak ? getPositionInput() : null
+        visible: posPort !== null
+        port: posPort
+        isInput: true
+        showLabel: false
+        connectionDragging: root.connectionDragging
+        dragPosition: root.dragPosition
+
+        anchors.left: parent.left
+        anchors.leftMargin: -Theme.portRadius
+        anchors.top: parent.top
+        anchors.topMargin: 8
+
+        onDragStarted: function(p, pos) { root.connectionDragStarted(p, pos) }
+        onDragUpdated: function(pos) { root.connectionDragUpdated(pos) }
+        onDragEnded: function(pos) { root.connectionDragEnded(pos) }
+    }
+
+    // POSITION OUTPUT PORT (for emitters — right side, near top)
+    PortItem {
+        id: positionOutputPort
+        property var posPort: isShapeOrUtility ? getPositionOutput() : null
+        visible: posPort !== null
+        port: posPort
+        isInput: false
+        showLabel: false
+        connectionDragging: root.connectionDragging
+        dragPosition: root.dragPosition
+
+        anchors.right: parent.right
+        anchors.rightMargin: -Theme.portRadius
+        anchors.top: parent.top
+        anchors.topMargin: 8
+
+        onDragStarted: function(p, pos) { root.connectionDragStarted(p, pos) }
+        onDragUpdated: function(pos) { root.connectionDragUpdated(pos) }
+        onDragEnded: function(pos) { root.connectionDragEnded(pos) }
     }
 }

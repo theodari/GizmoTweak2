@@ -14,6 +14,7 @@ RotationTweak::RotationTweak(QObject* parent)
     // Inputs
     addInput(QStringLiteral("frame"), Port::DataType::Frame, true);  // Required
     addInput(QStringLiteral("ratio"), Port::DataType::RatioAny);  // Accepts Ratio1D or Ratio2D
+    addInput(QStringLiteral("center"), Port::DataType::Position);  // Center override
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
@@ -89,18 +90,19 @@ void RotationTweak::setFollowGizmo(bool follow)
 }
 
 QPointF RotationTweak::apply(qreal x, qreal y, qreal ratio,
-                             qreal /*gizmoX*/, qreal /*gizmoY*/) const
+                             qreal gizmoX, qreal gizmoY) const
 {
     // Effective angle based on ratio
     qreal effectiveAngle = _angle * ratio;
     qreal radians = qDegreesToRadians(effectiveAngle);
 
-    // Always use centerX/centerY as rotation center
-    // (followGizmo only controls whether ratio comes from gizmo or is 1.0)
+    // Center = own automatable center + position cable offset (additive)
+    qreal cx = _centerX + gizmoX;
+    qreal cy = _centerY + gizmoY;
 
     // Translate to origin (center)
-    qreal dx = x - _centerX;
-    qreal dy = y - _centerY;
+    qreal dx = x - cx;
+    qreal dy = y - cy;
 
     // Rotate
     qreal cosA = qCos(radians);
@@ -110,7 +112,7 @@ QPointF RotationTweak::apply(qreal x, qreal y, qreal ratio,
     qreal rotatedY = dx * sinA + dy * cosA;
 
     // Translate back
-    return QPointF(_centerX + rotatedX, _centerY + rotatedY);
+    return QPointF(cx + rotatedX, cy + rotatedY);
 }
 
 QJsonObject RotationTweak::propertiesToJson() const

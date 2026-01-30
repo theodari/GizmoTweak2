@@ -12,6 +12,7 @@ GizmoNode::GizmoNode(QObject* parent)
 {
     setDisplayName(QStringLiteral("Gizmo"));
     addOutput(QStringLiteral("ratio"), Port::DataType::Ratio2D);
+    addOutput(QStringLiteral("center"), Port::DataType::Position);
 
     // Automation: Scale track with scaleX (0) and scaleY (1)
     auto* scaleTrack = createAutomationTrack(QStringLiteral("Scale"), 2, QColor(255, 165, 0));

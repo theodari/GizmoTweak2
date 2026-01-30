@@ -20,6 +20,10 @@ GroupNode::GroupNode(QObject* parent)
     // Output - outputs any ratio type
     addOutput(QStringLiteral("ratio"), Port::DataType::RatioAny);
 
+    // Position pass-through
+    addInput(QStringLiteral("center"), Port::DataType::Position);
+    addOutput(QStringLiteral("center"), Port::DataType::Position);
+
     // Automation: Position track with positionX (0) and positionY (1)
     auto* positionTrack = createAutomationTrack(QStringLiteral("Position"), 2, QColor(70, 130, 180));
     positionTrack->setupParameter(0, -2.0, 2.0, _positionX, tr("Position X"), 100.0, QStringLiteral("%"));

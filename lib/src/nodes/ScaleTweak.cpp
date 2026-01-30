@@ -12,6 +12,7 @@ ScaleTweak::ScaleTweak(QObject* parent)
     // Inputs
     addInput(QStringLiteral("frame"), Port::DataType::Frame, true);  // Required
     addInput(QStringLiteral("ratio"), Port::DataType::RatioAny);  // Accepts Ratio1D or Ratio2D
+    addInput(QStringLiteral("center"), Port::DataType::Position);  // Center override
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
@@ -141,13 +142,12 @@ void ScaleTweak::setFollowGizmo(bool follow)
 }
 
 QPointF ScaleTweak::apply(qreal x, qreal y, qreal ratioX, qreal ratioY,
-                          qreal /*gizmoX*/, qreal /*gizmoY*/) const
+                          qreal gizmoX, qreal gizmoY) const
 {
     // Determine which ratio to use for each axis
     qreal rX, rY;
     if (_crossOver)
     {
-        // CrossOver: X uses Y's ratio, Y uses X's ratio
         rX = ratioY;
         rY = ratioX;
     }
@@ -158,20 +158,19 @@ QPointF ScaleTweak::apply(qreal x, qreal y, qreal ratioX, qreal ratioY,
     }
 
     // Interpolate scale factor based on ratio
-    // ratio = 0 -> no scaling (factor = 1)
-    // ratio = 1 -> full scaling (factor = scaleX/Y)
     qreal effectiveScaleX = 1.0 + (_scaleX - 1.0) * rX;
     qreal effectiveScaleY = 1.0 + (_scaleY - 1.0) * rY;
 
-    // Always use centerX/centerY as scale center
-    // (followGizmo only controls whether ratio comes from gizmo or is 1.0)
+    // Center = own automatable center + position cable offset (additive)
+    qreal cx = _centerX + gizmoX;
+    qreal cy = _centerY + gizmoY;
 
     // Scale around center point
-    qreal dx = x - _centerX;
-    qreal dy = y - _centerY;
+    qreal dx = x - cx;
+    qreal dy = y - cy;
 
-    qreal resultX = _centerX + dx * effectiveScaleX;
-    qreal resultY = _centerY + dy * effectiveScaleY;
+    qreal resultX = cx + dx * effectiveScaleX;
+    qreal resultY = cy + dy * effectiveScaleY;
 
     return QPointF(resultX, resultY);
 }

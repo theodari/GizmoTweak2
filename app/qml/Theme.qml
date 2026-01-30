@@ -43,11 +43,13 @@ QtObject {
     readonly property color portFrame: "#64B4FF"
     readonly property color portRatio2D: "#64FF96"
     readonly property color portRatio1D: "#FFA064"
+    readonly property color portPosition: "#C864FF"
 
     // Câbles
     readonly property color cableFrame: "#64B4FF"
     readonly property color cableRatio2D: "#64FF96"
     readonly property color cableRatio1D: "#FFA064"
+    readonly property color cablePosition: "#C864FF"
     readonly property color cablePreview: "#FFFFFF"
 
     // Grille du canvas

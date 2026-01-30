@@ -176,6 +176,8 @@ Rectangle {
                     Layout.fillWidth: true
                     title: qsTr("General")
                     visible: root.selectedNode !== null
+                            && root.selectedNode.type !== "Input"
+                            && root.selectedNode.type !== "Output"
 
                     GridLayout {
                         columns: 2
@@ -589,44 +591,36 @@ Rectangle {
                                 model: root.selectedNode ? root.selectedNode.patternNames : []
 
                                 Rectangle {
-                                    width: 70
-                                    height: 70
+                                    property int thumbSize: 66
+                                    width: thumbSize + 4
+                                    height: thumbSize + 18
                                     color: (root.selectedNode && root.selectedNode.patternIndex === index) ? Theme.accent : Theme.surface
                                     border.color: patternMouseArea.containsMouse ? Theme.textHighlight : Theme.border
                                     border.width: (root.selectedNode && root.selectedNode.patternIndex === index) ? 2 : 1
                                     radius: 4
 
-                                    ColumnLayout {
+                                    Column {
                                         anchors.fill: parent
                                         anchors.margins: 2
                                         spacing: 2
 
-                                        // Mini preview from image provider
-                                        Rectangle {
-                                            Layout.fillWidth: true
-                                            Layout.fillHeight: true
-                                            color: Theme.previewBackground
-                                            radius: 2
-                                            clip: true
-
-                                            Image {
-                                                anchors.fill: parent
-                                                anchors.margins: 2
-                                                source: "image://patterns/" + index
-                                                sourceSize: Qt.size(64, 64)
-                                                cache: false
-                                                fillMode: Image.PreserveAspectFit
-                                            }
+                                        // Square preview rendered in C++
+                                        PatternThumbnail {
+                                            id: patternThumb
+                                            width: parent.width
+                                            height: width
+                                            inputNode: root.selectedNode
+                                            patternIndex: index
                                         }
 
                                         // Pattern name
                                         Label {
+                                            width: parent.width
                                             text: modelData
                                             color: (root.selectedNode && root.selectedNode.patternIndex === index) ? Theme.textOnHighlight : Theme.text
                                             font.pixelSize: 9
                                             elide: Text.ElideRight
                                             horizontalAlignment: Text.AlignHCenter
-                                            Layout.fillWidth: true
                                         }
                                     }
 
@@ -636,11 +630,10 @@ Rectangle {
                                         hoverEnabled: true
                                         onClicked: if (root.selectedNode) root.selectedNode.patternIndex = index
                                         onEntered: {
-                                            // Preview pattern on hover
                                             if (root.selectedNode) root.selectedNode.previewPatternIndex = index
+                                            patternThumb.update()
                                         }
                                         onExited: {
-                                            // Restore current pattern
                                             if (root.selectedNode) root.selectedNode.previewPatternIndex = -1
                                         }
                                     }
@@ -868,7 +861,7 @@ Rectangle {
                     }
 
                     Label { text: qsTr("Enabled:"); color: Theme.propLabel; font.pixelSize: Theme.propFontSize }
-                    CheckBox {
+                    StyledCheckBox {
                         checked: root.selectedNode ? root.selectedNode.enabled : true
                         onToggled: if (root.selectedNode) root.selectedNode.enabled = checked
                     }
@@ -879,6 +872,41 @@ Rectangle {
                         color: laserEngine && laserEngine.connected ? Theme.success : Theme.error
                         font.pixelSize: Theme.propFontSize
                         font.bold: true
+                    }
+                }
+            }
+
+            // Line break
+            StyledGroupBox {
+                Layout.fillWidth: true
+                title: qsTr("Line Break")
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 6
+
+                    ParameterRow {
+                        Layout.fillWidth: true
+                        label: qsTr("Max line")
+                        value: root.selectedNode ? root.selectedNode.lineBreakThreshold : 3.0
+                        minValue: 0.0
+                        maxValue: 3.0
+                        defaultValue: 3.0
+                        stepSize: 0.01
+                        decimals: 0
+                        displayRatio: 100.0
+                        suffix: "%"
+                        showAutomation: false
+                        onValueModified: function(newValue) { if (root.selectedNode) root.selectedNode.lineBreakThreshold = newValue }
+                    }
+
+                    Label {
+                        text: root.selectedNode && root.selectedNode.lineBreakThreshold < 3.0
+                              ? qsTr("Lines longer than %1% will break").arg(Math.round(root.selectedNode.lineBreakThreshold * 100))
+                              : qsTr("Max (no break)")
+                        color: Theme.textMuted
+                        font.pixelSize: Theme.fontSizeSmall
+                        font.italic: true
                     }
                 }
             }
@@ -936,7 +964,7 @@ Rectangle {
                     anchors.fill: parent
                     spacing: 8
 
-                    // Duration row with mode buttons
+                    // Duration row
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 4
@@ -948,21 +976,18 @@ Rectangle {
                             Layout.preferredWidth: 60
                         }
 
-                        SpinBox {
+                        StyledSpinBox {
                             id: durationSpinBox
                             from: 1000
                             to: 600000
                             stepSize: 1000
-                            Layout.preferredWidth: 80
+                            Layout.fillWidth: true
                             Layout.preferredHeight: 24
 
                             Binding on value {
                                 value: timelineGroupBox.inputNode ? timelineGroupBox.inputNode.duration : 10000
                                 when: !durationSpinBox.activeFocus
                             }
-
-                            property int decimals: 1
-                            property real realValue: value / 1000.0
 
                             textFromValue: function(value, locale) {
                                 return Number(value / 1000).toFixed(1) + " s"
@@ -977,25 +1002,16 @@ Rectangle {
                                     timelineGroupBox.inputNode.duration = value
                                 }
                             }
-
-                            background: Rectangle {
-                                color: Theme.surface
-                                border.color: Theme.border
-                                radius: 2
-                            }
-
-                            contentItem: TextInput {
-                                text: durationSpinBox.textFromValue(durationSpinBox.value, durationSpinBox.locale)
-                                font.pixelSize: Theme.propFontSize
-                                color: Theme.text
-                                horizontalAlignment: Qt.AlignHCenter
-                                verticalAlignment: Qt.AlignVCenter
-                                readOnly: !durationSpinBox.editable
-                                validator: durationSpinBox.validator
-                            }
                         }
+                    }
 
-                        // Duration mode buttons
+                    // Duration mode buttons
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Item { Layout.fillWidth: true }
+
                         Button {
                             id: keepTimeBtn
                             implicitWidth: 24
@@ -1092,6 +1108,8 @@ Rectangle {
                                 keepCountdownBtn.checked = true
                             }
                         }
+
+                        Item { Layout.fillWidth: true }
                     }
 
                     // Tempo/BPM row
@@ -1106,12 +1124,12 @@ Rectangle {
                             Layout.preferredWidth: 60
                         }
 
-                        SpinBox {
+                        StyledSpinBox {
                             id: bpmSpinBox
                             from: 10
                             to: 600
                             stepSize: 1
-                            Layout.preferredWidth: 80
+                            Layout.fillWidth: true
                             Layout.preferredHeight: 24
 
                             Binding on value {
@@ -1132,31 +1150,77 @@ Rectangle {
                                     timelineGroupBox.inputNode.bpm = value
                                 }
                             }
+                        }
+                    }
 
-                            background: Rectangle {
-                                color: Theme.surface
-                                border.color: Theme.border
-                                radius: 2
+                    // Beats and Measures row
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Label {
+                            text: qsTr("Beats:")
+                            color: Theme.propLabel
+                            font.pixelSize: Theme.propFontSize
+                            Layout.preferredWidth: 60
+                        }
+
+                        StyledSpinBox {
+                            id: beatsSpinBox
+                            from: 1
+                            to: 16
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 24
+
+                            Binding on value {
+                                value: timelineGroupBox.inputNode ? timelineGroupBox.inputNode.beatsPerMeasure : 4
+                                when: !beatsSpinBox.activeFocus
                             }
 
-                            contentItem: TextInput {
-                                text: bpmSpinBox.textFromValue(bpmSpinBox.value, bpmSpinBox.locale)
-                                font.pixelSize: Theme.propFontSize
-                                color: Theme.text
-                                horizontalAlignment: Qt.AlignHCenter
-                                verticalAlignment: Qt.AlignVCenter
-                                readOnly: !bpmSpinBox.editable
-                                validator: bpmSpinBox.validator
+                            onValueModified: {
+                                if (timelineGroupBox.inputNode) {
+                                    timelineGroupBox.inputNode.beatsPerMeasure = value
+                                }
                             }
                         }
 
-                        Item { Layout.fillWidth: true }
+                        Label {
+                            text: qsTr("Measures:")
+                            color: Theme.propLabel
+                            font.pixelSize: Theme.propFontSize
+                        }
 
-                        // Total beats (read-only)
+                        StyledSpinBox {
+                            id: measuresSpinBox
+                            from: 1
+                            to: 200
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 24
+
+                            Binding on value {
+                                value: timelineGroupBox.inputNode ? timelineGroupBox.inputNode.measures : 2
+                                when: !measuresSpinBox.activeFocus
+                            }
+
+                            onValueModified: {
+                                if (timelineGroupBox.inputNode) {
+                                    timelineGroupBox.inputNode.measures = value
+                                }
+                            }
+                        }
+
+                    }
+
+                    // Total beats (read-only)
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
                         Label {
                             text: qsTr("Total:")
                             color: Theme.propLabel
                             font.pixelSize: Theme.propFontSize
+                            Layout.preferredWidth: 60
                         }
 
                         Rectangle {
@@ -1179,94 +1243,11 @@ Rectangle {
                                 font.bold: true
                             }
                         }
-                    }
-
-                    // Beats and Measures row
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 4
 
                         Label {
-                            text: qsTr("Beats:")
-                            color: Theme.propLabel
-                            font.pixelSize: Theme.propFontSize
-                            Layout.preferredWidth: 60
-                        }
-
-                        SpinBox {
-                            id: beatsSpinBox
-                            from: 1
-                            to: 16
-                            Layout.preferredWidth: 50
-                            Layout.preferredHeight: 24
-
-                            Binding on value {
-                                value: timelineGroupBox.inputNode ? timelineGroupBox.inputNode.beatsPerMeasure : 4
-                                when: !beatsSpinBox.activeFocus
-                            }
-
-                            onValueModified: {
-                                if (timelineGroupBox.inputNode) {
-                                    timelineGroupBox.inputNode.beatsPerMeasure = value
-                                }
-                            }
-
-                            background: Rectangle {
-                                color: Theme.surface
-                                border.color: Theme.border
-                                radius: 2
-                            }
-
-                            contentItem: TextInput {
-                                text: beatsSpinBox.textFromValue(beatsSpinBox.value, beatsSpinBox.locale)
-                                font.pixelSize: Theme.propFontSize
-                                color: Theme.text
-                                horizontalAlignment: Qt.AlignHCenter
-                                verticalAlignment: Qt.AlignVCenter
-                                readOnly: !beatsSpinBox.editable
-                                validator: beatsSpinBox.validator
-                            }
-                        }
-
-                        Label {
-                            text: qsTr("Measures:")
-                            color: Theme.propLabel
-                            font.pixelSize: Theme.propFontSize
-                        }
-
-                        SpinBox {
-                            id: measuresSpinBox
-                            from: 1
-                            to: 200
-                            Layout.preferredWidth: 50
-                            Layout.preferredHeight: 24
-
-                            Binding on value {
-                                value: timelineGroupBox.inputNode ? timelineGroupBox.inputNode.measures : 2
-                                when: !measuresSpinBox.activeFocus
-                            }
-
-                            onValueModified: {
-                                if (timelineGroupBox.inputNode) {
-                                    timelineGroupBox.inputNode.measures = value
-                                }
-                            }
-
-                            background: Rectangle {
-                                color: Theme.surface
-                                border.color: Theme.border
-                                radius: 2
-                            }
-
-                            contentItem: TextInput {
-                                text: measuresSpinBox.textFromValue(measuresSpinBox.value, measuresSpinBox.locale)
-                                font.pixelSize: Theme.propFontSize
-                                color: Theme.text
-                                horizontalAlignment: Qt.AlignHCenter
-                                verticalAlignment: Qt.AlignVCenter
-                                readOnly: !measuresSpinBox.editable
-                                validator: measuresSpinBox.validator
-                            }
+                            text: qsTr("beats")
+                            color: Theme.textMuted
+                            font.pixelSize: Theme.fontSizeSmall
                         }
 
                         Item { Layout.fillWidth: true }
@@ -1863,7 +1844,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             id: loopCheck
                             checked: root.selectedNode ? root.selectedNode.loop : false
                             onToggled: if (root.selectedNode) root.selectedNode.loop = checked
@@ -1984,7 +1965,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             checked: root.selectedNode ? root.selectedNode.clamp : true
                             onToggled: if (root.selectedNode) root.selectedNode.clamp = checked
                         }
@@ -2379,7 +2360,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             checked: root.selectedNode ? root.selectedNode.uniform : true
                             onToggled: if (root.selectedNode) root.selectedNode.uniform = checked
                         }
@@ -2433,7 +2414,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             checked: root.selectedNode ? root.selectedNode.crossOver : false
                             onToggled: if (root.selectedNode) root.selectedNode.crossOver = checked
                         }
@@ -2452,7 +2433,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             checked: root.selectedNode ? root.selectedNode.followGizmo : false
                             onToggled: if (root.selectedNode) root.selectedNode.followGizmo = checked
                         }
@@ -2545,7 +2526,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             checked: root.selectedNode ? root.selectedNode.followGizmo : false
                             onToggled: if (root.selectedNode) root.selectedNode.followGizmo = checked
                         }
@@ -2762,7 +2743,7 @@ Rectangle {
                     Layout.preferredWidth: 70
                 }
 
-                CheckBox {
+                StyledCheckBox {
                     checked: root.selectedNode ? root.selectedNode.followGizmo : true
                     onToggled: if (root.selectedNode) root.selectedNode.followGizmo = checked
                 }
@@ -2881,7 +2862,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             checked: root.selectedNode ? root.selectedNode.crossOver : false
                             onToggled: if (root.selectedNode) root.selectedNode.crossOver = checked
                         }
@@ -2900,7 +2881,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             checked: root.selectedNode ? root.selectedNode.targetted : false
                             onToggled: if (root.selectedNode) root.selectedNode.targetted = checked
                         }
@@ -2919,7 +2900,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             checked: root.selectedNode ? root.selectedNode.followGizmo : false
                             onToggled: if (root.selectedNode) root.selectedNode.followGizmo = checked
                         }
@@ -3050,7 +3031,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             checked: root.selectedNode ? root.selectedNode.radial : true
                             onToggled: if (root.selectedNode) root.selectedNode.radial = checked
                         }
@@ -3069,7 +3050,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             checked: root.selectedNode ? root.selectedNode.followGizmo : false
                             onToggled: if (root.selectedNode) root.selectedNode.followGizmo = checked
                         }
@@ -3175,7 +3156,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             checked: root.selectedNode ? root.selectedNode.followGizmo : false
                             onToggled: if (root.selectedNode) root.selectedNode.followGizmo = checked
                         }
@@ -3325,7 +3306,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             checked: root.selectedNode ? root.selectedNode.followGizmo : true
                             onToggled: if (root.selectedNode) root.selectedNode.followGizmo = checked
                         }
@@ -3384,13 +3365,13 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             text: "X"
                             checked: root.selectedNode ? root.selectedNode.affectX : true
                             onToggled: if (root.selectedNode) root.selectedNode.affectX = checked
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             text: "Y"
                             checked: root.selectedNode ? root.selectedNode.affectY : true
                             onToggled: if (root.selectedNode) root.selectedNode.affectY = checked
@@ -3410,7 +3391,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             id: useSeedCheck
                             checked: root.selectedNode ? root.selectedNode.useSeed : false
                             onToggled: if (root.selectedNode) root.selectedNode.useSeed = checked
@@ -3495,19 +3476,19 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             text: "R"
                             checked: root.selectedNode ? root.selectedNode.affectRed : true
                             onToggled: if (root.selectedNode) root.selectedNode.affectRed = checked
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             text: "G"
                             checked: root.selectedNode ? root.selectedNode.affectGreen : true
                             onToggled: if (root.selectedNode) root.selectedNode.affectGreen = checked
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             text: "B"
                             checked: root.selectedNode ? root.selectedNode.affectBlue : true
                             onToggled: if (root.selectedNode) root.selectedNode.affectBlue = checked
@@ -3527,7 +3508,7 @@ Rectangle {
                             Layout.preferredWidth: 70
                         }
 
-                        CheckBox {
+                        StyledCheckBox {
                             id: colorUseSeedCheck
                             checked: root.selectedNode ? root.selectedNode.useSeed : false
                             onToggled: if (root.selectedNode) root.selectedNode.useSeed = checked

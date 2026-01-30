@@ -86,9 +86,6 @@ ApplicationWindow {
 
     property NodeGraph graph: NodeGraph {}
     property string currentFile: ""
-
-    // Bind graph to pattern image provider
-    onGraphChanged: if (patternProvider) patternProvider.graph = graph
     property bool showProperties: true  // Left panel visibility
     property bool showTimeline: true  // Timeline panel visibility
     property string statusHint: ""  // Hover instructions for status bar
@@ -122,6 +119,20 @@ ApplicationWindow {
         graph.createNode("Input", Qt.point(800, 80))
         graph.createNode("Output", Qt.point(800, 500))
         graph.clearUndoStack()  // Clear undo after creating initial nodes
+        selectInputNode()
+    }
+
+    // Select the InputNode and show its properties panel
+    function selectInputNode() {
+        for (var i = 0; i < graph.rowCount(); i++) {
+            var node = graph.nodeAt(i)
+            if (node && node.type === "Input") {
+                graph.clearSelection()
+                node.selected = true
+                canvas.selectedNode = node
+                return
+            }
+        }
     }
 
     // File operations
@@ -132,6 +143,7 @@ ApplicationWindow {
         graph.clearUndoStack()  // Clear undo after creating initial nodes
         graph.setClean()  // Mark as saved (fresh document)
         currentFile = ""
+        selectInputNode()
     }
 
     function saveGraph(fileUrl) {
@@ -167,6 +179,7 @@ ApplicationWindow {
                     graph.setClean()  // Mark as saved
                     currentFile = filePath
                     recentFiles.addRecentFile(filePath)
+                    selectInputNode()
                     toast.showSuccess(qsTr("Graph loaded successfully"))
                 } else {
                     toast.showError(qsTr("Failed to parse graph file"))

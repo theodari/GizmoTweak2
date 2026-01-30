@@ -900,14 +900,4 @@ Item {
         confirmDeleteSelected()
     }
 
-    // Keyboard shortcuts
-    Shortcut {
-        sequence: "Delete"
-        onActivated: deleteSelected()
-    }
-
-    Shortcut {
-        sequence: "Backspace"
-        onActivated: deleteSelected()
-    }
 }

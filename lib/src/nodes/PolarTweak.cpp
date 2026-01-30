@@ -14,6 +14,7 @@ PolarTweak::PolarTweak(QObject* parent)
     // Inputs
     addInput(QStringLiteral("frame"), Port::DataType::Frame, true);  // Required
     addInput(QStringLiteral("ratio"), Port::DataType::RatioAny);  // Accepts Ratio1D or Ratio2D
+    addInput(QStringLiteral("center"), Port::DataType::Position);  // Center override
 
     // Output
     addOutput(QStringLiteral("frame"), Port::DataType::Frame);
@@ -127,7 +128,7 @@ void PolarTweak::setFollowGizmo(bool follow)
 }
 
 QPointF PolarTweak::apply(qreal x, qreal y, qreal ratioX, qreal ratioY,
-                          qreal /*gizmoX*/, qreal /*gizmoY*/) const
+                          qreal gizmoX, qreal gizmoY) const
 {
     // Determine which ratio to use
     qreal rX, rY;
@@ -145,18 +146,18 @@ QPointF PolarTweak::apply(qreal x, qreal y, qreal ratioX, qreal ratioY,
     // Combined ratio for effects
     qreal ratio = (rX + rY) / 2.0;
 
-    // Always use centerX/centerY as transformation center
-    // (followGizmo only controls whether ratio comes from gizmo or is 1.0)
+    // Center = own automatable center + position cable offset (additive)
+    qreal cx = _centerX + gizmoX;
+    qreal cy = _centerY + gizmoY;
 
     // Convert to polar coordinates relative to center
-    qreal dx = x - _centerX;
-    qreal dy = y - _centerY;
+    qreal dx = x - cx;
+    qreal dy = y - cy;
     qreal distance = qSqrt(dx * dx + dy * dy);
     qreal angle = qAtan2(dy, dx);
 
     if (distance < 0.0001)
     {
-        // Point is at center, no transformation possible
         return QPointF(x, y);
     }
 
@@ -167,17 +168,15 @@ QPointF PolarTweak::apply(qreal x, qreal y, qreal ratioX, qreal ratioY,
         qreal expansionAmount = _expansion * ratio;
         if (_targetted)
         {
-            // Move towards center
             newDistance = distance * (1.0 - expansionAmount);
         }
         else
         {
-            // Expand outward
             newDistance = distance * (1.0 + expansionAmount);
         }
     }
 
-    // Apply ring effect - creates wave distortion based on distance
+    // Apply ring effect
     if (!qFuzzyIsNull(_ringScale) && _ringRadius > 0.0)
     {
         qreal ringPhase = (distance / _ringRadius) * 2.0 * M_PI;
@@ -185,12 +184,11 @@ QPointF PolarTweak::apply(qreal x, qreal y, qreal ratioX, qreal ratioY,
         newDistance += ringOffset;
     }
 
-    // Ensure distance doesn't go negative
     newDistance = qMax(0.0, newDistance);
 
     // Convert back to Cartesian
-    qreal resultX = _centerX + newDistance * qCos(angle);
-    qreal resultY = _centerY + newDistance * qSin(angle);
+    qreal resultX = cx + newDistance * qCos(angle);
+    qreal resultY = cy + newDistance * qSin(angle);
 
     return QPointF(resultX, resultY);
 }

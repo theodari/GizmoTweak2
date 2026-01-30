@@ -17,6 +17,10 @@ TimeShiftNode::TimeShiftNode(QObject* parent)
     // Output: shifted time ratio (outputs any ratio type)
     addOutput(QStringLiteral("shifted"), Port::DataType::RatioAny);
 
+    // Position pass-through
+    addInput(QStringLiteral("center"), Port::DataType::Position);
+    addOutput(QStringLiteral("center"), Port::DataType::Position);
+
     // Automation: Time track with delay (0) and scale (1)
     auto* timeTrack = createAutomationTrack(QStringLiteral("Time"), 2, QColor(65, 105, 225));  // Royal blue
     timeTrack->setupParameter(0, -10.0, 10.0, _delay, tr("Delay"), 1000.0, QStringLiteral(" ms"));

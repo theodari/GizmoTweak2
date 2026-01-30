@@ -64,6 +64,7 @@ Item {
             if (dt === Port.DataType.Frame) return Theme.portFrame
             if (dt === Port.DataType.Ratio2D) return Theme.portRatio2D
             if (dt === Port.DataType.Ratio1D) return Theme.portRatio1D
+            if (dt === Port.DataType.Position) return Theme.portPosition
             if (dt === Port.DataType.RatioAny) return Theme.border  // Will show dual colors
             return Theme.border
         }

@@ -17,6 +17,10 @@ MirrorNode::MirrorNode(QObject* parent)
     // Output: mirrored shape
     addOutput(QStringLiteral("shape"), Port::DataType::Ratio2D);
 
+    // Position pass-through
+    addInput(QStringLiteral("center"), Port::DataType::Position);
+    addOutput(QStringLiteral("center"), Port::DataType::Position);
+
     // Automation: Angle track with customAngle (0)
     auto* angleTrack = createAutomationTrack(QStringLiteral("Angle"), 1, QColor(255, 140, 0));  // Dark orange
     angleTrack->setupParameter(0, -180.0, 180.0, _customAngle, tr("Angle"), 1.0, QStringLiteral("°"));

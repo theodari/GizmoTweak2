@@ -49,11 +49,8 @@ bool TestEvaluateUpTo::fuzzyCompare(qreal a, qreal b, qreal epsilon)
 xengine::Frame* TestEvaluateUpTo::createTestFrame()
 {
     auto* frame = new xengine::Frame();
-    xengine::Sample s;
-    s.x = 100; s.y = 200; s.r = 255; s.g = 0; s.b = 0;
-    frame->append(s);
-    s.x = 300; s.y = 400; s.r = 0; s.g = 255; s.b = 0;
-    frame->append(s);
+    frame->addSample(0.1, 0.2, 0.0, 1.0, 0.0, 0.0, 1);
+    frame->addSample(0.3, 0.4, 0.0, 0.0, 1.0, 0.0, 1);
     return frame;
 }
 
@@ -412,8 +409,6 @@ void TestEvaluateUpTo::testEvaluateUpToDisconnectedTweak()
 
     // Disconnected tweak is not in the path -> returns nullptr
     QVERIFY(result == nullptr);
-
-    delete inputFrame;
 }
 
 QTEST_MAIN(TestEvaluateUpTo)

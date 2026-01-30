@@ -68,6 +68,13 @@ private:
     // Returns (0, 0) if no Gizmo is connected
     QPointF findConnectedGizmoCenter(Port* ratioPort) const;
 
+    // Evaluate position chain (Position port type)
+    // Returns the center coordinates transmitted through position patch cords
+    QPointF evaluatePositionChain(Port* positionPort) const;
+
+    // Find a Position input port on a node
+    Port* findPositionPort(Node* node) const;
+
     NodeGraph* _graph{nullptr};
     mutable QStringList _validationErrors;
 };

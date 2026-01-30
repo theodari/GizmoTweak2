@@ -25,6 +25,7 @@
 #include "nodes/ColorFuzzynessTweak.h"
 #include "nodes/SplitTweak.h"
 #include "nodes/RounderTweak.h"
+#include "nodes/OutputNode.h"
 
 #include <QVariantMap>
 
@@ -288,6 +289,92 @@ QPointF GraphEvaluator::findConnectedGizmoCenter(Port* ratioPort) const
                 }
             }
         }
+    }
+
+    return QPointF(0.0, 0.0);
+}
+
+Port* GraphEvaluator::findPositionPort(Node* node) const
+{
+    if (!node) return nullptr;
+    for (auto* port : node->inputs())
+    {
+        if (port->dataType() == Port::DataType::Position)
+        {
+            return port;
+        }
+    }
+    return nullptr;
+}
+
+QPointF GraphEvaluator::evaluatePositionChain(Port* positionPort) const
+{
+    if (!positionPort || !_graph) return QPointF(0.0, 0.0);
+
+    auto* sourceNode = getConnectedNode(positionPort);
+    if (!sourceNode) return QPointF(0.0, 0.0);
+
+    auto nodeType = sourceNode->type();
+
+    // GizmoNode: return center (0,0 for LinearWave)
+    if (nodeType == QStringLiteral("Gizmo"))
+    {
+        auto* gizmo = qobject_cast<GizmoNode*>(sourceNode);
+        if (gizmo)
+        {
+            if (gizmo->shape() == GizmoNode::Shape::LinearWave)
+            {
+                return QPointF(0.0, 0.0);
+            }
+            return QPointF(gizmo->centerX(), gizmo->centerY());
+        }
+    }
+
+    // Transform: transform input position through geometry
+    if (nodeType == QStringLiteral("Transform"))
+    {
+        auto* group = qobject_cast<GroupNode*>(sourceNode);
+        if (group)
+        {
+            // Find Position input on this Transform
+            auto* posInput = findPositionPort(sourceNode);
+            if (posInput && posInput->isConnected())
+            {
+                auto inputPos = evaluatePositionChain(posInput);
+                // Apply transform: translate by position offset
+                return QPointF(inputPos.x() + group->positionX(),
+                               inputPos.y() + group->positionY());
+            }
+            // No Position input — use Transform's own position
+            return QPointF(group->positionX(), group->positionY());
+        }
+    }
+
+    // Mirror: mirror input position
+    if (nodeType == QStringLiteral("Mirror"))
+    {
+        auto* mirror = qobject_cast<MirrorNode*>(sourceNode);
+        if (mirror)
+        {
+            auto* posInput = findPositionPort(sourceNode);
+            if (posInput && posInput->isConnected())
+            {
+                auto inputPos = evaluatePositionChain(posInput);
+                return mirror->mirror(inputPos.x(), inputPos.y());
+            }
+            return QPointF(0.0, 0.0);
+        }
+    }
+
+    // TimeShift: pass-through
+    if (nodeType == QStringLiteral("TimeShift"))
+    {
+        auto* posInput = findPositionPort(sourceNode);
+        if (posInput && posInput->isConnected())
+        {
+            return evaluatePositionChain(posInput);
+        }
+        return QPointF(0.0, 0.0);
     }
 
     return QPointF(0.0, 0.0);
@@ -558,7 +645,15 @@ xengine::Frame* GraphEvaluator::evaluate(xengine::Frame* input, qreal time)
 
             // Find gizmo center for tweaks that use it as transformation center
             qreal gizmoX = 0.0, gizmoY = 0.0;
-            if (followGizmo)
+            auto* posPort = findPositionPort(node);
+            if (posPort && posPort->isConnected())
+            {
+                // Position patch cord takes priority
+                auto posCenter = evaluatePositionChain(posPort);
+                gizmoX = posCenter.x();
+                gizmoY = posCenter.y();
+            }
+            else if (followGizmo)
             {
                 QPointF gizmoCenter = findConnectedGizmoCenter(ratioPort);
                 gizmoX = gizmoCenter.x();
@@ -573,6 +668,45 @@ xengine::Frame* GraphEvaluator::evaluate(xengine::Frame* input, qreal time)
 
         // Swap buffers
         std::swap(currentFrame, tempFrame);
+    }
+
+    // Post-processing: line break on Output node
+    auto* outputNode = qobject_cast<OutputNode*>(findNodeByType(QStringLiteral("Output")));
+    if (outputNode)
+    {
+        qreal threshold = outputNode->lineBreakThreshold();
+        if (threshold > 0.0 && currentFrame->size() > 1)
+        {
+            tempFrame->clear();
+            auto prev = currentFrame->at(0);
+            tempFrame->addSample(prev);
+
+            for (int i = 1; i < currentFrame->size(); ++i)
+            {
+                auto cur = currentFrame->at(i);
+
+                // Only break between two colored (non-blank) samples
+                if (prev.isColored() && cur.isColored())
+                {
+                    qreal dx = cur.getX() - prev.getX();
+                    qreal dy = cur.getY() - prev.getY();
+                    qreal dist = qSqrt(dx * dx + dy * dy);
+
+                    if (dist > threshold)
+                    {
+                        // Insert blank at end of previous segment (same position as prev)
+                        tempFrame->addSample(prev.getX(), prev.getY(), 0.0, 0.0, 0.0, 0.0, prev.getNb());
+                        // Insert blank at start of new segment (same position as cur)
+                        tempFrame->addSample(cur.getX(), cur.getY(), 0.0, 0.0, 0.0, 0.0, cur.getNb());
+                    }
+                }
+
+                tempFrame->addSample(cur);
+                prev = cur;
+            }
+
+            std::swap(currentFrame, tempFrame);
+        }
     }
 
     // Clean up temp frame
@@ -703,7 +837,14 @@ xengine::Frame* GraphEvaluator::evaluateUpTo(xengine::Frame* input, Node* stopNo
             }
 
             qreal gizmoX = 0.0, gizmoY = 0.0;
-            if (followGizmo)
+            auto* posPort = findPositionPort(node);
+            if (posPort && posPort->isConnected())
+            {
+                auto posCenter = evaluatePositionChain(posPort);
+                gizmoX = posCenter.x();
+                gizmoY = posCenter.y();
+            }
+            else if (followGizmo)
             {
                 QPointF gizmoCenter = findConnectedGizmoCenter(ratioPort);
                 gizmoX = gizmoCenter.x();

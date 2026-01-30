@@ -29,7 +29,8 @@ public:
         Frame,
         Ratio2D,
         Ratio1D,
-        RatioAny  // Accepts both Ratio1D and Ratio2D
+        RatioAny,  // Accepts both Ratio1D and Ratio2D
+        Position   // Center position (x, y) for tweak center override
     };
     Q_ENUM(DataType)
 
