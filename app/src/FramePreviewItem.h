@@ -7,6 +7,8 @@
 #include "core/Node.h"
 #include "core/NodeGraph.h"
 
+namespace gizmotweak2 { class ExcaliburEngine; }
+
 class FramePreviewItem : public QQuickPaintedItem
 {
     Q_OBJECT
@@ -18,6 +20,10 @@ class FramePreviewItem : public QQuickPaintedItem
     // Mode 2: Evaluate a graph at a given time (for PreviewPanel)
     Q_PROPERTY(gizmotweak2::NodeGraph* graph READ graph WRITE setGraph NOTIFY graphChanged)
     Q_PROPERTY(qreal time READ time WRITE setTime NOTIFY timeChanged)
+
+    // Laser engine output
+    Q_PROPERTY(gizmotweak2::ExcaliburEngine* laserEngine READ laserEngine WRITE setLaserEngine NOTIFY laserEngineChanged)
+    Q_PROPERTY(int zoneIndex READ zoneIndex WRITE setZoneIndex NOTIFY zoneIndexChanged)
 
     // Visual properties
     Q_PROPERTY(bool showGrid READ showGrid WRITE setShowGrid NOTIFY showGridChanged)
@@ -42,6 +48,13 @@ public:
     qreal time() const { return _time; }
     void setTime(qreal time);
 
+    // Laser engine output
+    gizmotweak2::ExcaliburEngine* laserEngine() const { return _laserEngine; }
+    void setLaserEngine(gizmotweak2::ExcaliburEngine* engine);
+
+    int zoneIndex() const { return _zoneIndex; }
+    void setZoneIndex(int index);
+
     // Visual properties
     bool showGrid() const { return _showGrid; }
     void setShowGrid(bool show);
@@ -59,6 +72,8 @@ signals:
     void nodeChanged();
     void graphChanged();
     void timeChanged();
+    void laserEngineChanged();
+    void zoneIndexChanged();
     void showGridChanged();
     void gridColorChanged();
     void backgroundColorChanged();
@@ -81,6 +96,9 @@ private:
     // Evaluate graph on main thread (called when graph or time changes)
     void evaluateGraph();
 
+    // Send evaluated frame to laser engine
+    void sendFrameToZone();
+
     // Find InputNode in graph
     gizmotweak2::Node* findInputNode() const;
 
@@ -91,6 +109,10 @@ private:
     gizmotweak2::NodeGraph* _graph{nullptr};
     qreal _time{0.0};
     xengine::Frame* _evaluatedFrame{nullptr};  // Owned by this class when in graph mode
+
+    // Laser engine
+    gizmotweak2::ExcaliburEngine* _laserEngine{nullptr};
+    int _zoneIndex{0};
 
     // Visual properties
     bool _showGrid{true};

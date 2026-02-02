@@ -5,6 +5,7 @@
 #include "core/Node.h"
 #include "core/NodeGraph.h"
 #include "nodes/InputNode.h"
+#include "ExcaliburEngine.h"
 
 using namespace gizmotweak2;
 
@@ -164,6 +165,9 @@ void FramePreviewItem::evaluateGraph()
         delete _evaluatedFrame;
         _evaluatedFrame = result;
     }
+
+    // Send to laser engine
+    sendFrameToZone();
 }
 
 Node* FramePreviewItem::findInputNode() const
@@ -180,6 +184,49 @@ Node* FramePreviewItem::findInputNode() const
         }
     }
     return nullptr;
+}
+
+// ============================================================================
+// Laser engine output
+// ============================================================================
+
+void FramePreviewItem::setLaserEngine(gizmotweak2::ExcaliburEngine* engine)
+{
+    if (_laserEngine != engine)
+    {
+        _laserEngine = engine;
+        emit laserEngineChanged();
+    }
+}
+
+void FramePreviewItem::setZoneIndex(int index)
+{
+    if (_zoneIndex != index)
+    {
+        _zoneIndex = index;
+        emit zoneIndexChanged();
+    }
+}
+
+void FramePreviewItem::sendFrameToZone()
+{
+    if (!_laserEngine || !_evaluatedFrame)
+        return;
+
+    QVariantList points;
+    for (int i = 0; i < _evaluatedFrame->size(); ++i)
+    {
+        const auto& sample = _evaluatedFrame->at(i);
+        QVariantMap point;
+        point[QStringLiteral("x")] = sample.getX();
+        point[QStringLiteral("y")] = sample.getY();
+        point[QStringLiteral("r")] = sample.getR();
+        point[QStringLiteral("g")] = sample.getG();
+        point[QStringLiteral("b")] = sample.getB();
+        points.append(point);
+    }
+
+    _laserEngine->sendFrame(_zoneIndex, points);
 }
 
 // ============================================================================

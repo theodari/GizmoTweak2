@@ -883,6 +883,7 @@ ApplicationWindow {
                     SplitView.minimumWidth: 200
                     SplitView.maximumWidth: 600
                     graph: root.graph
+                    currentZoneIndex: root.currentZoneIndex
 
                     // Keyframe editing context from timeline
                     currentTrack: timelinePanel.currentTrack

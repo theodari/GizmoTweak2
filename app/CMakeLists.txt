@@ -60,8 +60,8 @@ qt_add_qml_module(${APP_NAME}
         src/FramePreviewItem.cpp
         src/RecentFilesManager.h
         src/RecentFilesManager.cpp
-        src/PatternImageProvider.h
-        src/PatternImageProvider.cpp
+        src/PatternThumbnail.h
+        src/PatternThumbnail.cpp
         ${ENGINE_SOURCES}
     RESOURCES
         resources/gizmoTweakPatterns.ild

@@ -19,6 +19,9 @@ Rectangle {
     // Grid toggle
     property bool showGrid: true
 
+    // Laser engine output
+    property int currentZoneIndex: 0
+
     // Keyframe editing context (set from Main.qml)
     property AutomationTrack currentTrack: null
     property int currentKeyFrameMs: -1
@@ -83,6 +86,8 @@ Rectangle {
                 gridColor: Theme.previewGrid
                 backgroundColor: Theme.previewBackground
                 lineWidth: 2.0
+                laserEngine: laserEngine
+                zoneIndex: root.currentZoneIndex
             }
 
             // Hover area for Grid toggle button
